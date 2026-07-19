@@ -1,0 +1,13 @@
+[package]
+name = "brain-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "brain"
+path = "src/main.rs"
+
+[dependencies]
+brain-core = { path = "../core" }
+anyhow.workspace = true
+notify.workspace = true
