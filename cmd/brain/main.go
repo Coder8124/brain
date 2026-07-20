@@ -16,6 +16,7 @@ import (
 	"github.com/pragun/brain/internal/capture/sources"
 	"github.com/pragun/brain/internal/index"
 	"github.com/pragun/brain/internal/provider"
+	"github.com/pragun/brain/internal/router"
 )
 
 const (
@@ -29,7 +30,8 @@ func usage() {
 	fmt.Fprintf(os.Stderr, `brain — local-first second brain
 
 USAGE
-    brain doctor                      probe local model runtimes
+    brain doctor [--probe]            list runtimes and tiers; --probe loads each model
+    brain key set|rm <ref>            manage API keys in the macOS keychain
     brain index [--watch]             sync vault into the cache and embed
     brain ask <question…>             retrieve and answer from the vault
     brain search <query…>             retrieve only, no generation
@@ -58,7 +60,9 @@ func main() {
 	var err error
 	switch {
 	case cmd == "doctor":
-		err = doctor()
+		err = doctor(hasFlag(args, "--probe"))
+	case cmd == "key":
+		err = keyCmd(args)
 	case cmd == "index":
 		err = runIndex(hasFlag(args, "--watch"))
 	case cmd == "search" && rest != "":
@@ -162,7 +166,7 @@ func openEvents() (*index.Index, error) {
 	return ix, nil
 }
 
-func doctor() error {
+func doctor(probe bool) error {
 	found := provider.Discover()
 	if len(found) == 0 {
 		return fmt.Errorf("no local runtime responding on any known port")
@@ -173,7 +177,78 @@ func doctor() error {
 			fmt.Printf("    %s\n", m)
 		}
 	}
+
+	cfg, err := router.Load(vaultPath())
+	if err != nil {
+		return err
+	}
+	rt, err := router.New(cfg, vaultPath())
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("\n─── tiers ───")
+	for _, line := range rt.Available() {
+		fmt.Println(" ", line)
+	}
+
+	if !probe {
+		fmt.Println("\nrun `brain doctor --probe` to verify each model actually loads")
+		return nil
+	}
+
+	// Listing a model proves nothing: a corrupt pull lists fine and fails on
+	// load. Probing is what catches it before a rollup does at 3am.
+	fmt.Println("\n─── probe ───")
+	for _, t := range []router.Tier{router.T1, router.T2} {
+		model, err := rt.Model(t)
+		if err != nil {
+			fmt.Printf("  %s  %v\n", t, err)
+			continue
+		}
+		cap := rt.Probe(model)
+		switch {
+		case !cap.Loads:
+			fmt.Printf("  %s  %-24s FAILS TO LOAD — %s\n", t, model, truncate(cap.Err, 70))
+		case !cap.StructuredOutput:
+			fmt.Printf("  %s  %-24s loads, but ignores JSON schemas\n", t, model)
+		default:
+			fmt.Printf("  %s  %-24s ok, honours JSON schemas\n", t, model)
+		}
+	}
 	return nil
+}
+
+func truncate(s string, n int) string {
+	s = strings.ReplaceAll(s, "\n", " ")
+	if len(s) > n {
+		return s[:n] + "…"
+	}
+	return s
+}
+
+func keyCmd(args []string) error {
+	if len(args) < 2 {
+		return fmt.Errorf("usage: brain key set|rm <ref>")
+	}
+	ref := args[1]
+
+	switch args[0] {
+	case "set":
+		fmt.Fprintf(os.Stderr, "paste key for %q (input is not echoed to the terminal history): ", ref)
+		var secret string
+		if _, err := fmt.Scanln(&secret); err != nil {
+			return err
+		}
+		if err := router.SetKey(ref, secret); err != nil {
+			return err
+		}
+		fmt.Println("stored in keychain")
+		return nil
+	case "rm":
+		return router.DeleteKey(ref)
+	}
+	return fmt.Errorf("usage: brain key set|rm <ref>")
 }
 
 func runIndex(watch bool) error {
