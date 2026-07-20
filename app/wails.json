@@ -1,0 +1,16 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "brain",
+  "outputfilename": "brain-app",
+  "frontend:dir": "frontend",
+  "frontend:install": "",
+  "frontend:build": "",
+  "wailsjsdir": "./frontend",
+  "author": {
+    "name": "brain"
+  },
+  "info": {
+    "productName": "brain",
+    "productVersion": "0.1.0"
+  }
+}
