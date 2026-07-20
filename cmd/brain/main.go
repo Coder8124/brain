@@ -38,6 +38,9 @@ USAGE
     brain capture [--daemon] [--backfill-days N]
                                       pull episodic events
     brain timeline [--verbose]        today's activity
+    brain rollup [--date YYYY-MM-DD] [--dry-run]
+                                      distil a day into a note and proposals
+    brain review [--all]              accept or reject queued proposals
     brain prune [days]                drop raw events past the retention window
 
 ENV
@@ -73,6 +76,10 @@ func main() {
 		err = runCapture(hasFlag(args, "--daemon"), flagInt(args, "--backfill-days", defaultBackfillDays))
 	case cmd == "timeline":
 		err = timeline(hasFlag(args, "--verbose"))
+	case cmd == "rollup":
+		err = runRollup(flagStr(args, "--date", ""), hasFlag(args, "--dry-run"))
+	case cmd == "review":
+		err = runReview(hasFlag(args, "--all"))
 	case cmd == "prune":
 		err = prune(int64(argInt(args, 0, 90)))
 	default:
@@ -100,6 +107,15 @@ func flagInt(args []string, name string, def int) int {
 			if v, err := strconv.Atoi(args[i+1]); err == nil {
 				return v
 			}
+		}
+	}
+	return def
+}
+
+func flagStr(args []string, name, def string) string {
+	for i, a := range args {
+		if a == name && i+1 < len(args) {
+			return args[i+1]
 		}
 	}
 	return def

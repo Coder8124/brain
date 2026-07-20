@@ -19,6 +19,9 @@ const (
 )
 
 type Event struct {
+	// ID is the rowid once persisted, zero before. Proposals cite these, so
+	// every inference can be traced back to the observations behind it.
+	ID    int64
 	TS    int64
 	Kind  Kind
 	App   string

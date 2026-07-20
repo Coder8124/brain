@@ -2,6 +2,7 @@ package capture
 
 import (
 	"database/sql"
+	"strings"
 )
 
 // Schema lives in the same SQLite file as the vault index but is conceptually
@@ -92,7 +93,7 @@ func SetCursor(db *sql.DB, source string, cursor int64) error {
 // Range returns events in a window, oldest first.
 func Range(db *sql.DB, from, to int64) ([]Event, error) {
 	rows, err := db.Query(
-		`SELECT ts, kind, app, title, url, path, dur_s FROM events
+		`SELECT id, ts, kind, app, title, url, path, dur_s FROM events
 		 WHERE ts >= ? AND ts < ? ORDER BY ts`, from, to)
 	if err != nil {
 		return nil, err
@@ -104,7 +105,7 @@ func Range(db *sql.DB, from, to int64) ([]Event, error) {
 		var e Event
 		var kind string
 		var app, title, url, path sql.NullString
-		if err := rows.Scan(&e.TS, &kind, &app, &title, &url, &path, &e.DurS); err != nil {
+		if err := rows.Scan(&e.ID, &e.TS, &kind, &app, &title, &url, &path, &e.DurS); err != nil {
 			return nil, err
 		}
 		e.Kind = Kind(kind)
@@ -130,4 +131,40 @@ func Count(db *sql.DB) (int, error) {
 	var n int
 	err := db.QueryRow("SELECT COUNT(*) FROM events").Scan(&n)
 	return n, err
+}
+
+// ByIDs fetches specific events, for showing the evidence behind a proposal.
+// Ordered by time rather than by id so the reader sees a narrative.
+func ByIDs(db *sql.DB, ids []int64) ([]Event, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	rows, err := db.Query(
+		`SELECT id, ts, kind, app, title, url, path, dur_s FROM events
+		 WHERE id IN (`+strings.Join(placeholders, ",")+`) ORDER BY ts`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Event
+	for rows.Next() {
+		var e Event
+		var kind string
+		var app, title, url, path sql.NullString
+		if err := rows.Scan(&e.ID, &e.TS, &kind, &app, &title, &url, &path, &e.DurS); err != nil {
+			return nil, err
+		}
+		e.Kind = Kind(kind)
+		e.App, e.Title, e.URL, e.Path = app.String, title.String, url.String, path.String
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }
