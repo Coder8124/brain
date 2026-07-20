@@ -1,0 +1,396 @@
+// Command brain is the CLI front end. The same packages back the Wails app, so
+// there is one engine rather than two.
+package main
+
+import (
+	"fmt"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/pragun/brain/internal/capture"
+	"github.com/pragun/brain/internal/capture/sources"
+	"github.com/pragun/brain/internal/index"
+	"github.com/pragun/brain/internal/provider"
+)
+
+const (
+	defaultEmbedModel = "nomic-embed-text"
+	defaultChatModel  = "qwen3.6"
+	// Default first-run reach. Deliberately not "everything" — see PollOnce.
+	defaultBackfillDays = 7
+)
+
+func usage() {
+	fmt.Fprintf(os.Stderr, `brain — local-first second brain
+
+USAGE
+    brain doctor                      probe local model runtimes
+    brain index [--watch]             sync vault into the cache and embed
+    brain ask <question…>             retrieve and answer from the vault
+    brain search <query…>             retrieve only, no generation
+    brain capture [--daemon] [--backfill-days N]
+                                      pull episodic events
+    brain timeline [--verbose]        today's activity
+    brain prune [days]                drop raw events past the retention window
+
+ENV
+    BRAIN_VAULT   path to the vault (default ./vault)
+    BRAIN_MODEL   chat model (default %s)
+    BRAIN_EMBED   embed model (default %s)
+    BRAIN_REPOS   colon-separated repos to mine for commits
+`, defaultChatModel, defaultEmbedModel)
+	os.Exit(2)
+}
+
+func main() {
+	if len(os.Args) < 2 {
+		usage()
+	}
+	cmd := os.Args[1]
+	args := os.Args[2:]
+	rest := strings.Join(args, " ")
+
+	var err error
+	switch {
+	case cmd == "doctor":
+		err = doctor()
+	case cmd == "index":
+		err = runIndex(hasFlag(args, "--watch"))
+	case cmd == "search" && rest != "":
+		err = search(rest)
+	case cmd == "ask" && rest != "":
+		err = ask(rest)
+	case cmd == "capture":
+		err = runCapture(hasFlag(args, "--daemon"), flagInt(args, "--backfill-days", defaultBackfillDays))
+	case cmd == "timeline":
+		err = timeline(hasFlag(args, "--verbose"))
+	case cmd == "prune":
+		err = prune(int64(argInt(args, 0, 90)))
+	default:
+		usage()
+	}
+
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
+}
+
+func hasFlag(args []string, name string) bool {
+	for _, a := range args {
+		if a == name {
+			return true
+		}
+	}
+	return false
+}
+
+func flagInt(args []string, name string, def int) int {
+	for i, a := range args {
+		if a == name && i+1 < len(args) {
+			if v, err := strconv.Atoi(args[i+1]); err == nil {
+				return v
+			}
+		}
+	}
+	return def
+}
+
+func argInt(args []string, pos, def int) int {
+	if pos < len(args) {
+		if v, err := strconv.Atoi(args[pos]); err == nil {
+			return v
+		}
+	}
+	return def
+}
+
+func env(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+func vaultPath() string { return env("BRAIN_VAULT", "vault") }
+
+func watchedRepos() []string {
+	if v := os.Getenv("BRAIN_REPOS"); v != "" {
+		return strings.Split(v, ":")
+	}
+	if wd, err := os.Getwd(); err == nil {
+		return []string{wd}
+	}
+	return nil
+}
+
+// findProvider picks the first running local runtime. Cloud BYOK slots in here
+// later by reading a configured base URL and key.
+func findProvider() (*provider.Provider, error) {
+	found := provider.Discover()
+	if len(found) == 0 {
+		return nil, fmt.Errorf("no local model runtime found — start Ollama, LM Studio, Jan or Msty")
+	}
+	p := found[0]
+	fmt.Fprintf(os.Stderr, "· %s at %s (%d models)\n", p.Provider.Name, p.Provider.BaseURL, len(p.Models))
+	return p.Provider, nil
+}
+
+func openIndex() (*index.Index, error) {
+	v := vaultPath()
+	if _, err := os.Stat(v); err != nil {
+		return nil, fmt.Errorf("vault not found at %s — set BRAIN_VAULT", v)
+	}
+	return index.Open(v)
+}
+
+// openEvents opens the index and ensures the episodic tables exist alongside it.
+func openEvents() (*index.Index, error) {
+	ix, err := openIndex()
+	if err != nil {
+		return nil, err
+	}
+	if err := capture.InitStore(ix.DB); err != nil {
+		ix.Close()
+		return nil, err
+	}
+	return ix, nil
+}
+
+func doctor() error {
+	found := provider.Discover()
+	if len(found) == 0 {
+		return fmt.Errorf("no local runtime responding on any known port")
+	}
+	for _, d := range found {
+		fmt.Printf("%s — %s\n", d.Provider.Name, d.Provider.BaseURL)
+		for _, m := range d.Models {
+			fmt.Printf("    %s\n", m)
+		}
+	}
+	return nil
+}
+
+func runIndex(watch bool) error {
+	ix, err := openIndex()
+	if err != nil {
+		return err
+	}
+	defer ix.Close()
+
+	p, err := findProvider()
+	if err != nil {
+		return err
+	}
+	embedModel := env("BRAIN_EMBED", defaultEmbedModel)
+
+	pass := func() error {
+		rep, err := ix.Sync()
+		if err != nil {
+			return err
+		}
+		embedded, err := ix.EmbedPending(p, embedModel, 32)
+		if err != nil {
+			return err
+		}
+		notes, _ := ix.NoteCount()
+		edges, _ := ix.EdgeCount()
+		fmt.Printf("+%d ~%d -%d =%d · embedded %d · %d notes, %d edges\n",
+			rep.Added, rep.Updated, rep.Removed, rep.Unchanged, embedded, notes, edges)
+		return nil
+	}
+
+	if err := pass(); err != nil || !watch {
+		return err
+	}
+
+	fmt.Printf("watching %s …\n", ix.Vault)
+	// Poll rather than fsnotify: the vault is small, a 2s tick is imperceptible,
+	// and it sidesteps the editor-save event storms that make watchers fire
+	// three times per file.
+	for range time.Tick(2 * time.Second) {
+		if err := pass(); err != nil {
+			fmt.Fprintln(os.Stderr, "· sync error:", err)
+		}
+	}
+	return nil
+}
+
+func search(query string) error {
+	ix, err := openIndex()
+	if err != nil {
+		return err
+	}
+	defer ix.Close()
+
+	p, err := findProvider()
+	if err != nil {
+		return err
+	}
+
+	hits, err := ix.Search(p, env("BRAIN_EMBED", defaultEmbedModel), query, 8)
+	if err != nil {
+		return err
+	}
+	for _, h := range hits {
+		fmt.Printf("%.3f  %-28s %s\n", h.Score, h.Slug, h.Title)
+	}
+	return nil
+}
+
+func ask(question string) error {
+	ix, err := openIndex()
+	if err != nil {
+		return err
+	}
+	defer ix.Close()
+
+	p, err := findProvider()
+	if err != nil {
+		return err
+	}
+
+	answer, hits, err := ix.Ask(p,
+		env("BRAIN_EMBED", defaultEmbedModel),
+		env("BRAIN_MODEL", defaultChatModel),
+		question, 6, 6000)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("\n%s\n\n", strings.TrimSpace(answer))
+	fmt.Println("─── context ───")
+	for _, h := range hits {
+		if h.Via != "" {
+			fmt.Printf("  %-28s via %s\n", h.Slug, h.Via)
+		} else {
+			fmt.Printf("  %-28s %.3f\n", h.Slug, h.Score)
+		}
+	}
+	return nil
+}
+
+func scratchDir(vault string) string { return filepath.Join(vault, ".brain", "scratch") }
+
+func runCapture(daemon bool, backfillDays int) error {
+	ix, err := openEvents()
+	if err != nil {
+		return err
+	}
+	defer ix.Close()
+
+	policy := capture.DefaultPolicy()
+	repos := watchedRepos()
+	backfill := int64(backfillDays) * 86400
+
+	n, err := capture.PollOnce(ix.DB, scratchDir(ix.Vault), repos, policy, backfill)
+	if err != nil {
+		return err
+	}
+	total, _ := capture.Count(ix.DB)
+	fmt.Printf("+%d events · %d total\n", n, total)
+
+	if !daemon {
+		return nil
+	}
+
+	front := sources.ProbeFrontmost()
+	if front.Granularity == sources.AppAndTitle {
+		fmt.Println("· focus sampling: app + window title")
+	} else {
+		fmt.Println("· focus sampling: app name only — grant Accessibility to System Events for window titles")
+	}
+	fmt.Println("· recording. ^C to stop.")
+
+	// Sessions are written only when they end, so a crash loses at most the one
+	// in flight. That is the right trade against writing every 5s sample.
+	coalescer := capture.NewCoalescer(60)
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	ticker := time.NewTicker(sources.PollInterval)
+	defer ticker.Stop()
+	// Browser and git are pull sources; polling them every 5s would be wasteful,
+	// so they run on their own slower cadence.
+	pullTicker := time.NewTicker(5 * time.Minute)
+	defer pullTicker.Stop()
+
+	for {
+		select {
+		case <-stop:
+			if done := coalescer.Flush(); done != nil {
+				capture.Insert(ix.DB, *done)
+			}
+			fmt.Println("\n· stopped, session flushed")
+			return nil
+
+		case <-ticker.C:
+			sample, err := front.Sample()
+			if err != nil || policy.ShouldDrop(sample) {
+				continue
+			}
+			if done := coalescer.Push(sample); done != nil {
+				if err := capture.Insert(ix.DB, *done); err != nil {
+					fmt.Fprintln(os.Stderr, "· write error:", err)
+				}
+			}
+
+		case <-pullTicker.C:
+			n, err := capture.PollOnce(ix.DB, scratchDir(ix.Vault), repos, policy, backfill)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "· poll error:", err)
+			} else if n > 0 {
+				fmt.Printf("+%d events\n", n)
+			}
+		}
+	}
+}
+
+func timeline(verbose bool) error {
+	ix, err := openEvents()
+	if err != nil {
+		return err
+	}
+	defer ix.Close()
+
+	from, to := capture.TodayBounds()
+	events, err := capture.Range(ix.DB, from, to)
+	if err != nil {
+		return err
+	}
+
+	fmt.Print(capture.Render(events, verbose))
+
+	if totals := capture.ByApp(events); len(totals) > 0 {
+		fmt.Println("\n─── time by app ───")
+		for i, t := range totals {
+			if i >= 10 {
+				break
+			}
+			fmt.Printf("  %-20s %s\n", t.App, capture.Dur(t.Secs))
+		}
+	}
+	return nil
+}
+
+func prune(days int64) error {
+	ix, err := openEvents()
+	if err != nil {
+		return err
+	}
+	defer ix.Close()
+
+	n, err := capture.Prune(ix.DB, capture.Now()-days*86400)
+	if err != nil {
+		return err
+	}
+	remain, _ := capture.Count(ix.DB)
+	fmt.Printf("dropped %d events older than %dd · %d remain\n", n, days, remain)
+	return nil
+}

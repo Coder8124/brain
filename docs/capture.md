@@ -6,7 +6,7 @@ to look at, no amount of summarisation later will save it.
 
 ## Scope
 
-New crate `crates/capture`, plus an `events` table in the existing index.
+New package `internal/capture`, plus an `events` table in the existing index.
 
 ```sql
 CREATE TABLE events (
