@@ -88,7 +88,7 @@ enforced at the sampler (Ollama `format`, LM Studio structured output).
 Default on, cheap, high signal:
 - frontmost app + window title via `NSWorkspace` / AX API, sampled 5s, coalesced
 - browser history read from Chrome/Arc/Safari SQLite
-- EventKit calendar, FSEvents file activity, commits in watched repos
+- calendar via EventKit (JXA under osascript, read-only), commits in watched repos
 - clipboard text (blocklisted apps excluded)
 
 Default **off**, explicit opt-in:
@@ -99,6 +99,23 @@ secure text fields, visible menubar recording state, global panic hotkey.
 
 Routine detection is sequence mining over the episodic table, not prompting.
 The LLM's job is to *name* a discovered pattern, not to find it.
+
+Calendar is the one source that reaches into the future: upcoming meetings are
+captured with their real start times and refreshed wholesale each poll, so a
+rescheduled meeting never leaves a ghost. That future window is what lets the
+secretary say "standup in 20 minutes".
+
+## Secretary
+
+The system leads; it is not an archive you query. On open it presents a **brief**
+assembled from data already captured — imminent meetings first (the only hard
+deadline), then open loops stalest-first, then what has gone quiet, then what you
+usually do around now. Building a brief runs no model, so it is instant and
+offline; the model only extracts open loops upstream during the daily rollup.
+
+The archive surfaces remain, in the background: the ask box sits under every
+panel and the timeline is one tab over. Secretary is the default, not the only,
+mode.
 
 ## App
 

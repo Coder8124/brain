@@ -18,11 +18,22 @@ import (
 // a brief, so it is instant and it works offline. The model's only role is the
 // upstream extraction of commitments; surfacing them is deterministic.
 type Brief struct {
-	Greeting string  `json:"greeting"`
-	Loops    []Loop  `json:"loops"`
-	Dormant  []Nudge `json:"dormant"`
-	Usual    []Nudge `json:"usual"`
-	Review   int     `json:"review"`
+	Greeting string    `json:"greeting"`
+	Upcoming []Meeting `json:"upcoming"`
+	Loops    []Loop    `json:"loops"`
+	Dormant  []Nudge   `json:"dormant"`
+	Usual    []Nudge   `json:"usual"`
+	Review   int       `json:"review"`
+}
+
+// Meeting is a calendar event coming up soon. The most time-sensitive thing a
+// secretary surfaces — everything else can wait, a meeting cannot.
+type Meeting struct {
+	Title    string `json:"title"`
+	Cal      string `json:"cal"`
+	At       string `json:"at"`       // "14:30"
+	InMin    int    `json:"in_min"`   // minutes from now
+	Imminent bool   `json:"imminent"` // within 15 minutes
 }
 
 type Loop struct {
@@ -46,6 +57,33 @@ type Nudge struct {
 func Compose(db *sql.DB, now time.Time) (Brief, error) {
 	var b Brief
 	b.Greeting = greeting(now)
+
+	// --- what's coming up: the most time-sensitive thing, so it leads ---
+	// Read from the store, not live from EventKit, so the brief stays instant
+	// and works offline; the capture poll keeps the window fresh.
+	cal, err := capture.Range(db, now.Unix(), now.Add(8*time.Hour).Unix())
+	if err != nil {
+		return b, err
+	}
+	for _, e := range cal {
+		if e.Kind != capture.Calendar {
+			continue
+		}
+		mins := int(time.Unix(e.TS, 0).Sub(now).Minutes())
+		if mins < 0 {
+			continue
+		}
+		b.Upcoming = append(b.Upcoming, Meeting{
+			Title:    e.Title,
+			Cal:      e.App,
+			At:       time.Unix(e.TS, 0).Local().Format("15:04"),
+			InMin:    mins,
+			Imminent: mins <= 15,
+		})
+		if len(b.Upcoming) >= 4 {
+			break
+		}
+	}
 
 	// --- open loops, stalest first ---
 	loops, err := Open_(db)
@@ -141,8 +179,16 @@ func greeting(now time.Time) string {
 }
 
 // Headline is the single most important thing to say, for a collapsed orb
-// tooltip or a one-line summary. A secretary leads with the point.
+// tooltip or a one-line summary. A secretary leads with the point — and an
+// imminent meeting outranks everything, because it is the only item with a
+// hard deadline you cannot recover from missing.
 func (b Brief) Headline() string {
+	if len(b.Upcoming) > 0 {
+		m := b.Upcoming[0]
+		if m.Imminent {
+			return fmt.Sprintf("%s in %dm", m.Title, m.InMin)
+		}
+	}
 	for _, l := range b.Loops {
 		if l.Stale {
 			who := ""
@@ -167,5 +213,6 @@ func (b Brief) Headline() string {
 // IsQuiet reports whether the brief has nothing worth interrupting for, so the
 // app can stay out of the way rather than manufacturing noise.
 func (b Brief) IsQuiet() bool {
-	return len(b.Loops) == 0 && len(b.Dormant) == 0 && len(b.Usual) == 0 && b.Review == 0
+	return len(b.Upcoming) == 0 && len(b.Loops) == 0 &&
+		len(b.Dormant) == 0 && len(b.Usual) == 0 && b.Review == 0
 }

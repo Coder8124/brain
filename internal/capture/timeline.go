@@ -53,6 +53,8 @@ func Render(events []Event, verbose bool) string {
 			label = fmt.Sprintf("%-18s %s", or(e.App, "web"), e.URL)
 		case Commit:
 			label = fmt.Sprintf("%-18s %s — %s", "commit", e.Path, e.Title)
+		case Calendar:
+			label = fmt.Sprintf("%-18s %s", "📅 "+e.App, e.Title)
 		default:
 			label = fmt.Sprintf("%-18s %s", string(e.Kind), e.Title)
 		}

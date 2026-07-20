@@ -37,6 +37,25 @@ func runBrief() error {
 		return nil
 	}
 
+	if len(b.Upcoming) > 0 {
+		fmt.Println("\nComing up")
+		for _, m := range b.Upcoming {
+			when := fmt.Sprintf("in %dm", m.InMin)
+			if m.InMin >= 90 {
+				when = "at " + m.At
+			}
+			mark := " "
+			if m.Imminent {
+				mark = "!" // leave now
+			}
+			cal := ""
+			if m.Cal != "" {
+				cal = "  [" + m.Cal + "]"
+			}
+			fmt.Printf("  %s %-8s %s%s\n", mark, when, m.Title, cal)
+		}
+	}
+
 	if len(b.Loops) > 0 {
 		fmt.Println("\nOpen loops")
 		for _, l := range b.Loops {
