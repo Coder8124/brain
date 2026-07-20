@@ -1,15 +1,11 @@
 [package]
-name = "brain-cli"
+name = "brain-capture"
 version.workspace = true
 edition.workspace = true
 
-[[bin]]
-name = "brain"
-path = "src/main.rs"
-
 [dependencies]
 brain-core = { path = "../core" }
-brain-capture = { path = "../capture" }
 anyhow.workspace = true
-notify.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 rusqlite.workspace = true
