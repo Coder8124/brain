@@ -8,6 +8,7 @@ import (
 
 	"github.com/pragun/brain/internal/capture"
 	"github.com/pragun/brain/internal/router"
+	"github.com/pragun/brain/internal/secretary"
 )
 
 // Run rolls a single day up into a daily note and a set of proposals.
@@ -20,6 +21,7 @@ type Result struct {
 	DailyPath string
 	Proposals int
 	Skipped   int
+	Loops     int
 }
 
 func Day(db *sql.DB, vaultDir string, rt *router.Router, date time.Time, dryRun bool) (Result, error) {
@@ -102,6 +104,17 @@ func Day(db *sql.DB, vaultDir string, rt *router.Router, date time.Time, dryRun 
 	if !dryRun {
 		if err := writeDaily(vaultDir, dailySlug, dateStr, body, sessions); err != nil {
 			return res, err
+		}
+		// Pull open loops out of the day's log while we have it in hand. A
+		// secretary that never notices what you said you would do is just an
+		// archive with better prose.
+		if err := secretary.Init(db); err == nil {
+			if loops, err := secretary.Extract(rt, body, dailySlug); err == nil {
+				for _, c := range loops {
+					secretary.Add(db, &c)
+				}
+				res.Loops = len(loops)
+			}
 		}
 		for i := range proposals {
 			if err := Enqueue(db, &proposals[i]); err != nil {

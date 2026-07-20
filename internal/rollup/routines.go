@@ -1,13 +1,12 @@
-package routine
+package rollup
 
 import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strings"
 
-	"github.com/pragun/brain/internal/rollup"
 	"github.com/pragun/brain/internal/router"
+	"github.com/pragun/brain/internal/routine"
 )
 
 // Naming is the model's only job here. Mining found the pattern; the model
@@ -29,7 +28,7 @@ var nameSchema = map[string]any{
 // Routines go through the same review queue as everything else — there is no
 // privileged write path. A discovered pattern is still an inference about the
 // user, and inferences get approved.
-func Propose(db *sql.DB, rt *router.Router, periodics []Periodic, sequences []Sequence) (int, error) {
+func ProposeRoutines(db *sql.DB, rt *router.Router, periodics []routine.Periodic, sequences []routine.Sequence) (int, error) {
 	x := newNamer(rt)
 	queued := 0
 
@@ -41,19 +40,19 @@ func Propose(db *sql.DB, rt *router.Router, periodics []Periodic, sequences []Se
 			desc = named
 		}
 
-		prop := &rollup.Proposal{
-			Kind:     rollup.NewNote,
+		prop := &Proposal{
+			Kind:     NewNote,
 			Target:   p.Slug(),
 			Conf:     confidenceOf(p),
 			Evidence: p.EventIDs,
 			Model:    x.model,
-			Payload: rollup.Payload{
+			Payload: Payload{
 				Title: fmt.Sprintf("%s on %s", p.App, p.Cadence()),
 				Type:  "routine",
 				Body:  desc,
 			},
 		}
-		if err := rollup.Enqueue(db, prop); err != nil {
+		if err := Enqueue(db, prop); err != nil {
 			return queued, err
 		}
 		queued++
@@ -63,19 +62,19 @@ func Propose(db *sql.DB, rt *router.Router, periodics []Periodic, sequences []Se
 		desc := fmt.Sprintf("%s is usually followed by %s (%d times, %.0f%% of the time).",
 			s.From, s.To, s.Count, s.Share*100)
 
-		prop := &rollup.Proposal{
-			Kind:     rollup.NewNote,
+		prop := &Proposal{
+			Kind:     NewNote,
 			Target:   fmt.Sprintf("routines/%s-then-%s", slugify(s.From), slugify(s.To)),
 			Conf:     min(0.85, 0.4+s.Share/2),
 			Evidence: s.EventIDs,
 			Model:    "mining",
-			Payload: rollup.Payload{
+			Payload: Payload{
 				Title: s.String(),
 				Type:  "routine",
 				Body:  desc,
 			},
 		}
-		if err := rollup.Enqueue(db, prop); err != nil {
+		if err := Enqueue(db, prop); err != nil {
 			return queued, err
 		}
 		queued++
@@ -87,7 +86,7 @@ func Propose(db *sql.DB, rt *router.Router, periodics []Periodic, sequences []Se
 // confidenceOf scores a routine by how much it repeated and how tightly.
 // Consistency dominates: a pattern that holds four days in five is a routine
 // even if the window is loose, while a tight window seen rarely is a habit.
-func confidenceOf(p Periodic) float64 {
+func confidenceOf(p routine.Periodic) float64 {
 	conf := 0.3 + p.Consistency*0.5
 	if p.Weeks >= 6 {
 		conf += 0.1
@@ -149,17 +148,4 @@ func slugify(s string) string {
 		}
 	}
 	return string(out)
-}
-
-// cleanJSON strips the markdown fences some models wrap JSON in despite being
-// asked for raw JSON.
-func cleanJSON(s string) string {
-	s = strings.TrimSpace(s)
-	if strings.HasPrefix(s, "```") {
-		if i := strings.IndexByte(s, '\n'); i >= 0 {
-			s = s[i+1:]
-		}
-		s = strings.TrimSuffix(strings.TrimSpace(s), "```")
-	}
-	return strings.TrimSpace(s)
 }

@@ -106,7 +106,7 @@ func runRoutines(days int, propose bool) error {
 		return err
 	}
 
-	n, err := routine.Propose(ix.DB, rt, append(periodics, sites...), sequences)
+	n, err := rollup.ProposeRoutines(ix.DB, rt, append(periodics, sites...), sequences)
 	if err != nil {
 		return err
 	}
