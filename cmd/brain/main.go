@@ -41,6 +41,8 @@ USAGE
     brain rollup [--date YYYY-MM-DD] [--dry-run]
                                       distil a day into a note and proposals
     brain review [--all]              accept or reject queued proposals
+    brain routines [--days N] [--propose]
+                                      mine recurring patterns from the timeline
     brain prune [days]                drop raw events past the retention window
 
 ENV
@@ -80,6 +82,8 @@ func main() {
 		err = runRollup(flagStr(args, "--date", ""), hasFlag(args, "--dry-run"))
 	case cmd == "review":
 		err = runReview(hasFlag(args, "--all"))
+	case cmd == "routines":
+		err = runRoutines(flagInt(args, "--days", 60), hasFlag(args, "--propose"))
 	case cmd == "prune":
 		err = prune(int64(argInt(args, 0, 90)))
 	default:
