@@ -102,10 +102,10 @@ The LLM's job is to *name* a discovered pattern, not to find it.
 
 ## App
 
-Tauri v2 (idle RAM is a feature for an always-on process). Menubar orb with
+Wails v2 (idle RAM is a feature for an always-on process). Menubar orb with
 state; pull-down panel with today's timeline, ask box, review-queue badge.
 
-Graph view: layout precomputed in Rust, rendered in WebGL. Ego-mode only —
+Graph view: layout precomputed in Go, rendered in WebGL. Ego-mode only —
 2 hops from a focus node, never the whole graph. Time scrubber to watch the
 graph accrete. Click-through to Obsidian.
 
