@@ -16,6 +16,7 @@ import (
 	"github.com/pragun/brain/internal/rollup"
 	"github.com/pragun/brain/internal/router"
 	"github.com/pragun/brain/internal/routine"
+	"github.com/pragun/brain/internal/secretary"
 )
 
 type App struct {
@@ -43,7 +44,60 @@ func (a *App) open() (*index.Index, error) {
 		ix.Close()
 		return nil, err
 	}
+	if err := secretary.Init(ix.DB); err != nil {
+		ix.Close()
+		return nil, err
+	}
 	return ix, nil
+}
+
+// Brief is what the app leads with: the secretary speaking first. This is the
+// method that makes the product a secretary rather than an archive — the panel
+// opens on this, not on an ask box.
+func (a *App) Brief() (secretary.Brief, error) {
+	ix, err := a.open()
+	if err != nil {
+		return secretary.Brief{}, err
+	}
+	defer ix.Close()
+
+	b, err := secretary.Compose(ix.DB, time.Now())
+	if err != nil {
+		return b, err
+	}
+	b.Review, _ = rollup.PendingCount(ix.DB)
+	return b, nil
+}
+
+// LoopDone and LoopDrop close an open loop from the brief. Done means handled;
+// Drop means "stop telling me" and is retained so it is not re-surfaced.
+func (a *App) LoopDone(id int64) error {
+	ix, err := a.open()
+	if err != nil {
+		return err
+	}
+	defer ix.Close()
+	return secretary.SetStatus(ix.DB, id, secretary.Done)
+}
+
+func (a *App) LoopDrop(id int64) error {
+	ix, err := a.open()
+	if err != nil {
+		return err
+	}
+	defer ix.Close()
+	return secretary.SetStatus(ix.DB, id, secretary.Dropped)
+}
+
+// AddLoop lets the user hand the secretary a commitment directly.
+func (a *App) AddLoop(text string) error {
+	ix, err := a.open()
+	if err != nil {
+		return err
+	}
+	defer ix.Close()
+	_, err = secretary.Add(ix.DB, &secretary.Commitment{Text: text})
+	return err
 }
 
 // ---- shapes the frontend consumes. Kept flat and JSON-friendly. ----

@@ -30,6 +30,8 @@ func usage() {
 	fmt.Fprintf(os.Stderr, `brain — local-first second brain
 
 USAGE
+    brain brief                       what the secretary thinks you should know now
+    brain loop [add|done|drop]        manage open loops (commitments)
     brain doctor [--probe]            list runtimes and tiers; --probe loads each model
     brain key set|rm <ref>            manage API keys in the macOS keychain
     brain index [--watch]             sync vault into the cache and embed
@@ -82,6 +84,10 @@ func main() {
 		err = runRollup(flagStr(args, "--date", ""), hasFlag(args, "--dry-run"))
 	case cmd == "review":
 		err = runReview(hasFlag(args, "--all"))
+	case cmd == "brief":
+		err = runBrief()
+	case cmd == "loop":
+		err = commitmentCmd(args)
 	case cmd == "routines":
 		err = runRoutines(flagInt(args, "--days", 60), hasFlag(args, "--propose"))
 	case cmd == "prune":
@@ -114,6 +120,17 @@ func flagInt(args []string, name string, def int) int {
 		}
 	}
 	return def
+}
+
+func joinArgs(a []string) string { return strings.Join(a, " ") }
+
+func parseID(args []string) int64 {
+	if len(args) >= 2 {
+		var id int64
+		fmt.Sscan(args[1], &id)
+		return id
+	}
+	return 0
 }
 
 func flagStr(args []string, name, def string) string {
