@@ -1,4 +1,4 @@
-target/
+bin/
 vault/.brain/
 .DS_Store
 *.db
@@ -6,3 +6,4 @@ vault/.brain/
 *.db-shm
 node_modules/
 dist/
+build/bin/
