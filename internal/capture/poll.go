@@ -37,6 +37,19 @@ func PollOnce(db *sql.DB, scratch string, repos []string, policy *Policy, backfi
 		}
 	}
 
+	// Calendar reaches into the future and is refreshed wholesale rather than
+	// cursored: the source returns a window from 12h ago onward, and we replace
+	// exactly that window so a rescheduled meeting never leaves a ghost.
+	if cal, err := sources.CalendarEvents(14); err == nil {
+		kept := cal[:0]
+		for _, e := range cal {
+			if !policy.ShouldDrop(e) {
+				kept = append(kept, e)
+			}
+		}
+		ReplaceCalendarWindow(db, Now()-12*3600, kept)
+	}
+
 	for _, repo := range repos {
 		key := "git:" + repo
 		since := Cursor(db, key)

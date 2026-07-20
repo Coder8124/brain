@@ -161,3 +161,43 @@ func indexOf(s, sub string) int {
 	}
 	return -1
 }
+
+func TestBriefLeadsHeadlineWithImminentMeeting(t *testing.T) {
+	db := testDB(t)
+	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+
+	// A stale loop and a meeting 10 minutes out. The meeting must win the
+	// headline: it is the only item you cannot recover from missing.
+	Add(db, &Commitment{Text: "old thing", Created: now.AddDate(0, 0, -5).Unix()})
+	capture.Insert(db, capture.Event{Kind: capture.Calendar, Title: "standup", App: "Work",
+		TS: now.Add(10 * time.Minute).Unix()})
+
+	b, err := Compose(db, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b.Upcoming) != 1 || b.Upcoming[0].Title != "standup" {
+		t.Fatalf("expected the standup in upcoming, got %+v", b.Upcoming)
+	}
+	if !b.Upcoming[0].Imminent {
+		t.Error("a meeting 10 minutes out should be imminent")
+	}
+	if head := b.Headline(); head != "standup in 10m" {
+		t.Errorf("headline = %q, want the imminent meeting to lead", head)
+	}
+}
+
+func TestDistantMeetingDoesNotStealHeadlineFromStaleLoop(t *testing.T) {
+	db := testDB(t)
+	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+
+	Add(db, &Commitment{Text: "call the bank", Created: now.AddDate(0, 0, -4).Unix()})
+	// Two hours out — not imminent, so the stale loop still leads.
+	capture.Insert(db, capture.Event{Kind: capture.Calendar, Title: "review", App: "Work",
+		TS: now.Add(2 * time.Hour).Unix()})
+
+	b, _ := Compose(db, now)
+	if head := b.Headline(); head == "review in 120m" {
+		t.Error("a non-imminent meeting must not steal the headline from a stale loop")
+	}
+}

@@ -168,3 +168,35 @@ func ByIDs(db *sql.DB, ids []int64) ([]Event, error) {
 	}
 	return out, rows.Err()
 }
+
+// ReplaceCalendarWindow swaps out the captured calendar window wholesale.
+//
+// Calendar is the one source that captures the future, and the future changes:
+// meetings move, get cancelled, get added. Cursoring an append-only table would
+// accumulate stale ghosts of rescheduled meetings. Deleting everything from
+// `from` onward and re-inserting the fresh window keeps the stored view honest
+// and idempotent — re-polling never duplicates a meeting.
+func ReplaceCalendarWindow(db *sql.DB, from int64, events []Event) (int, error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("DELETE FROM events WHERE kind = 'calendar' AND ts >= ?", from); err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, e := range events {
+		if e.TS < from {
+			continue
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO events (ts, kind, app, title, url, path, dur_s) VALUES (?,?,?,?,?,?,?)`,
+			e.TS, string(e.Kind), nullable(e.App), nullable(e.Title), nil, nil, 0); err != nil {
+			return 0, err
+		}
+		n++
+	}
+	return n, tx.Commit()
+}
