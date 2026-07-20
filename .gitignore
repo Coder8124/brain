@@ -7,3 +7,4 @@ vault/.brain/
 node_modules/
 dist/
 build/bin/
+app/build/bin/
