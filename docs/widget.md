@@ -1,10 +1,11 @@
-# feat/tauri-widget — the app
+# feat/wails-widget — the app
 
-Tauri v2. Idle RAM is a feature for a process that runs all day; Electron's
+Wails v2. Idle RAM is a feature for a process that runs all day; Electron's
 baseline is not acceptable for something that sits in the menubar forever.
 
-`crates/core` becomes the Tauri backend directly — no rewrite, the CLI and the
-app share one engine.
+The `internal/*` packages become the Wails backend directly — no rewrite, the
+CLI and the app share one engine. Bound methods are thin wrappers over the same
+`index` and `capture` calls `cmd/brain` already makes.
 
 ## Surfaces
 
