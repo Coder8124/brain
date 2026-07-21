@@ -9,3 +9,5 @@ dist/
 build/bin/
 app/build/bin/
 app/vault/
+vault/recordings/
+vault/sources/

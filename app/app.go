@@ -19,6 +19,7 @@ import (
 	"github.com/pragun/brain/internal/secretary"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"golang.design/x/hotkey"
 )
 
 type App struct {
@@ -28,7 +29,27 @@ type App struct {
 
 func NewApp(vault string) *App { return &App{vault: vault} }
 
-func (a *App) startup(ctx context.Context) { a.ctx = ctx }
+func (a *App) startup(ctx context.Context) {
+	a.ctx = ctx
+	go a.registerHotkeys()
+}
+
+// registerHotkeys binds the global shortcuts that work even while the frameless
+// panel is hidden. ⌘⇧R toggles screen recording — the "assign a hotkey to start
+// recording, press again to stop" flow. Registration failure is non-fatal: the
+// in-panel button still works.
+func (a *App) registerHotkeys() {
+	hk := hotkey.New([]hotkey.Modifier{hotkey.ModCmd, hotkey.ModShift}, hotkey.KeyR)
+	if err := hk.Register(); err != nil {
+		return
+	}
+	for range hk.Keydown() {
+		state := a.ToggleRecording("")
+		// Surface the state change so the user gets feedback even with the panel
+		// hidden; the frontend also shows it when open.
+		runtime.EventsEmit(a.ctx, "record:hotkey", state)
+	}
+}
 
 // Hide dismisses the panel. With no traffic lights, this is how the window is
 // closed — bound to Esc in the frontend, so the panel behaves like a menubar
