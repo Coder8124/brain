@@ -31,7 +31,7 @@ func usage() {
 
 USAGE
     brain mode [secretary|tutor|business]   switch or show the active flavor
-    brain tutor [study|quiz <topic> | screen on|off | help]   study features
+    brain tutor [diagnostic <subject> | study|quiz <topic> | cards|review | screen on|off | help]
     brain business [tools | trends <q> | mcp add <name> <cmd...>]   MCP data work
     brain brief                       what the secretary thinks you should know now
     brain jot <thought>               braindump: capture and auto-file a thought\n    brain loop [add|done|drop]        manage open loops (commitments)

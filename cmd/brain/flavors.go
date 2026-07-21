@@ -76,6 +76,8 @@ func tutorCmd(args []string) error {
 		return tutorCards(strings.Join(args[1:], " "))
 	case "review":
 		return tutorReview()
+	case "diagnostic", "diagnose", "placement":
+		return tutorDiagnostic(strings.Join(args[1:], " "))
 	}
 	return fmt.Errorf("usage: brain tutor [study <topic> | quiz <topic> | screen on|off]")
 }
@@ -365,5 +367,94 @@ func jotCmd(text string) error {
 		return nil
 	}
 	fmt.Printf("filed as %s → %s — `brain review` to confirm\n", kind, prop.Target)
+	return nil
+}
+
+// tutorDiagnostic runs a Khan-style placement quiz: break the subject into
+// subskills, quiz across them, map what the student knows, and seed the deck
+// with their gaps.
+func tutorDiagnostic(subject string) error {
+	if subject == "" {
+		fmt.Println("pick a subject to place into:")
+		for _, pr := range tutor.Presets {
+			fmt.Printf("  brain tutor diagnostic %q\n", pr.Name)
+		}
+		fmt.Println("…or name any subject and it will build one.")
+		return nil
+	}
+	// Use the canonical preset title in the output when the input matches one.
+	if pr, ok := tutor.PresetFor(subject); ok {
+		subject = pr.Name
+	}
+	ix, err := openEvents()
+	if err != nil {
+		return err
+	}
+	defer ix.Close()
+	if err := tutor.InitDeck(ix.DB); err != nil {
+		return err
+	}
+	rt, err := openRouter()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("· building a placement quiz for %q …\n", subject)
+	subskills, err := tutor.Subskills(rt, subject)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("· covering: %s\n· generating questions …\n\n", strings.Join(subskills, ", "))
+
+	items, err := tutor.Diagnostic(rt, subject, subskills, 2)
+	if err != nil {
+		return err
+	}
+
+	in := bufio.NewReader(os.Stdin)
+	answers := make([]int, len(items))
+	for i, q := range items {
+		fmt.Printf("[%d/%d] (%s) %s\n", i+1, len(items), q.Subskill, q.Q)
+		for j, opt := range q.Options {
+			fmt.Printf("    %d) %s\n", j+1, opt)
+		}
+		fmt.Print("    your answer (number, enter to skip): ")
+		line, err := in.ReadString('\n')
+		if err != nil {
+			answers[i] = -1
+			break
+		}
+		choice := -1
+		if n := strings.TrimSpace(line); n != "" {
+			fmt.Sscan(n, &choice)
+			choice-- // 1-based to 0-based
+		}
+		answers[i] = choice
+		fmt.Println()
+	}
+
+	m := tutor.Score(subject, items, answers)
+	m.SortByLevel()
+
+	fmt.Printf("\n─── where you stand in %s ───\n", subject)
+	mark := map[tutor.Level]string{tutor.Gap: "○", tutor.Shaky: "◐", tutor.Solid: "●"}
+	for _, s := range m.Scores {
+		fmt.Printf("  %s %-28s %s  (%d/%d)\n", mark[s.Level], s.Subskill, s.Level, s.Correct, s.Total)
+	}
+	if m.StartHere != "" {
+		fmt.Printf("\n→ start with: %s\n", m.StartHere)
+	}
+
+	// Close the loop: the gaps become spaced-repetition cards.
+	weak := tutor.WeakCards(items, answers)
+	added := 0
+	for _, c := range weak {
+		if ok, _ := tutor.AddCard(ix.DB, c); ok {
+			added++
+		}
+	}
+	if added > 0 {
+		fmt.Printf("· added %d cards from what you missed — `brain tutor review` to practice them\n", added)
+	}
 	return nil
 }
