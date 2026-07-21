@@ -17,6 +17,8 @@ import (
 	"github.com/pragun/brain/internal/router"
 	"github.com/pragun/brain/internal/routine"
 	"github.com/pragun/brain/internal/secretary"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type App struct {
@@ -27,6 +29,22 @@ type App struct {
 func NewApp(vault string) *App { return &App{vault: vault} }
 
 func (a *App) startup(ctx context.Context) { a.ctx = ctx }
+
+// Hide dismisses the panel. With no traffic lights, this is how the window is
+// closed — bound to Esc in the frontend, so the panel behaves like a menubar
+// dropdown that gets out of the way rather than an app you quit.
+func (a *App) Hide() {
+	if a.ctx != nil {
+		runtime.WindowHide(a.ctx)
+	}
+}
+
+// Show brings the panel back (used when relaunched while already running).
+func (a *App) Show() {
+	if a.ctx != nil {
+		runtime.WindowShow(a.ctx)
+	}
+}
 
 // open returns a fresh index handle per call. These are cheap, and a
 // short-lived handle avoids holding the SQLite file open while the user has

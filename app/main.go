@@ -30,13 +30,25 @@ func main() {
 		// a day; it should feel like part of the menubar, not an application.
 		Width:  420,
 		Height: 640,
-		// The Modern Dark direction: never pure black (OLED smear on scroll).
-		BackgroundColour: &options.RGBA{R: 5, G: 6, B: 10, A: 255},
+		// Frameless: no OS title bar and no traffic-light buttons on screen.
+		// The panel is a clean floating surface; it is dragged by its own header
+		// and dismissed with Esc (see the frontend), the way a menubar dropdown
+		// behaves rather than an application window.
+		Frameless: true,
+		// Transparent so the frontend's rounded corners show through instead of
+		// square window edges.
+		BackgroundColour: &options.RGBA{R: 0, G: 0, B: 0, A: 0},
 		Assets:           assets,
 		OnStartup:        app.startup,
 		Bind:             []any{app},
+		// Single instance: relaunching the app re-shows the panel instead of
+		// spawning a second one. This is what makes Esc-to-hide safe — with no
+		// traffic lights, reopening from the launcher is how you get it back.
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId:               "com.brain.secondbrain",
+			OnSecondInstanceLaunch: func(options.SecondInstanceData) { app.Show() },
+		},
 		Mac: &mac.Options{
-			TitleBar:             mac.TitleBarHiddenInset(),
 			WebviewIsTransparent: true,
 			WindowIsTranslucent:  true,
 			About: &mac.AboutInfo{
