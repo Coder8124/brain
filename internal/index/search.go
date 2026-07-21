@@ -118,7 +118,7 @@ func (ix *Index) Expand(hits []Hit, minConf float64, limit int) ([]Hit, error) {
 // Ask is retrieval plus generation. Context is capped by character budget
 // rather than token count so this stays honest on a 4k-context local model.
 func (ix *Index) Ask(p *provider.Provider, embedModel, chatModel, question string, k, budget int) (string, []Hit, error) {
-	hits, err := ix.Search(p, embedModel, question, k)
+	hits, err := ix.HybridSearch(p, embedModel, question, k)
 	if err != nil {
 		return "", nil, err
 	}

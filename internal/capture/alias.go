@@ -20,6 +20,7 @@ const (
 	Commit    = event.Commit
 	Calendar  = event.Calendar
 	Clipboard = event.Clipboard
+	Screen    = event.Screen
 )
 
 const IncidentalSecs = event.IncidentalSecs

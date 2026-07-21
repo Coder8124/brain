@@ -16,6 +16,7 @@ const (
 	Commit    Kind = "commit"
 	Calendar  Kind = "calendar"
 	Clipboard Kind = "clipboard"
+	Screen    Kind = "screen"
 )
 
 type Event struct {
