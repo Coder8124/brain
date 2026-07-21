@@ -23,18 +23,30 @@ const (
 	Business  Flavor = "business"
 )
 
-func All() []Flavor { return []Flavor{Secretary, Tutor, Business} }
+// All returns the flavors this edition offers (see edition.go).
+func All() []Flavor { return Offered }
 
-func Parse(s string) (Flavor, error) {
-	switch Flavor(strings.ToLower(strings.TrimSpace(s))) {
-	case Secretary:
-		return Secretary, nil
-	case Tutor:
-		return Tutor, nil
-	case Business:
-		return Business, nil
+func offered(f Flavor) bool {
+	for _, o := range Offered {
+		if o == f {
+			return true
+		}
 	}
-	return "", fmt.Errorf("unknown flavor %q (want secretary, tutor or business)", s)
+	return false
+}
+
+// Parse accepts only a flavor this edition actually offers, so `brain mode
+// business` fails cleanly on the student build rather than half-working.
+func Parse(s string) (Flavor, error) {
+	f := Flavor(strings.ToLower(strings.TrimSpace(s)))
+	switch f {
+	case Secretary, Tutor, Business:
+		if !offered(f) {
+			return "", fmt.Errorf("this edition (%s) does not offer the %q flavor", EditionName, f)
+		}
+		return f, nil
+	}
+	return "", fmt.Errorf("unknown flavor %q", s)
 }
 
 func (f Flavor) Describe() string {
@@ -72,11 +84,11 @@ type MCPServer struct {
 func path(vault string) string { return filepath.Join(vault, ".brain", "flavor.json") }
 
 func Load(vault string) (*Config, error) {
-	cfg := &Config{Active: Secretary}
+	cfg := &Config{Active: Default}
 
 	raw, err := os.ReadFile(path(vault))
 	if os.IsNotExist(err) {
-		return cfg, nil // absent config means the base flavor, which is fine
+		return cfg, nil // absent config means this edition's default flavor
 	}
 	if err != nil {
 		return nil, err
@@ -84,8 +96,11 @@ func Load(vault string) (*Config, error) {
 	if err := json.Unmarshal(raw, cfg); err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", path(vault), err)
 	}
-	if cfg.Active == "" {
-		cfg.Active = Secretary
+	// A saved flavor this edition no longer offers (e.g. a config carried over
+	// from the full build) falls back to the default rather than showing a
+	// persona the product does not have.
+	if cfg.Active == "" || !offered(cfg.Active) {
+		cfg.Active = Default
 	}
 	return cfg, nil
 }
