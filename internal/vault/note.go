@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -53,6 +54,10 @@ type Note struct {
 	Body    string
 	Edges   []Edge
 	Hash    string // content hash, so reindexing only re-embeds what changed
+	// FirstSeen is a unix timestamp parsed from frontmatter, 0 if absent. It is
+	// what the graph's time scrubber animates over: when each note entered the
+	// vault.
+	FirstSeen int64
 }
 
 type frontmatter struct {
@@ -60,6 +65,11 @@ type frontmatter struct {
 	Title     string        `yaml:"title"`
 	Aliases   []string      `yaml:"aliases"`
 	Relations []rawRelation `yaml:"relations"`
+	// Any of these date fields seeds first_seen — the rollup writes first_seen,
+	// daily notes carry date, recordings carry captured.
+	FirstSeen string `yaml:"first_seen"`
+	Date      string `yaml:"date"`
+	Captured  string `yaml:"captured"`
 }
 
 type rawRelation struct {
@@ -173,15 +183,33 @@ func Parse(vaultDir, path, raw string) Note {
 	}
 
 	return Note{
-		Slug:    slug,
-		Path:    path,
-		Title:   title,
-		Kind:    kind,
-		Aliases: fm.Aliases,
-		Body:    body,
-		Edges:   edges,
-		Hash:    hash(raw),
+		Slug:      slug,
+		Path:      path,
+		Title:     title,
+		Kind:      kind,
+		Aliases:   fm.Aliases,
+		Body:      body,
+		Edges:     edges,
+		Hash:      hash(raw),
+		FirstSeen: parseDate(fm.FirstSeen, fm.Captured, fm.Date),
 	}
+}
+
+// parseDate returns the first parseable date among the candidates as a unix
+// timestamp, or 0. Accepts plain YYYY-MM-DD (what the vault writes) and RFC3339.
+func parseDate(candidates ...string) int64 {
+	for _, c := range candidates {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			continue
+		}
+		for _, layout := range []string{"2006-01-02", time.RFC3339, "2006-01-02 15:04"} {
+			if t, err := time.Parse(layout, c); err == nil {
+				return t.Unix()
+			}
+		}
+	}
+	return 0
 }
 
 // EmbedText is what actually gets embedded. Title and kind are prepended so a
