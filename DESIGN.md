@@ -122,17 +122,27 @@ mode.
 Wails v2 (idle RAM is a feature for an always-on process). Menubar orb with
 state; pull-down panel with today's timeline, ask box, review-queue badge.
 
-Graph view: layout precomputed in Go, rendered in WebGL. Ego-mode only —
-2 hops from a focus node, never the whole graph. Time scrubber to watch the
-graph accrete. Click-through to Obsidian.
+Graph view: the ego-graph (focus node + a few hops) is extracted in Go from the
+index; the force layout and rendering are done on an HTML canvas in the
+frontend. The design originally called for backend layout + WebGL, but ego-mode
+keeps the node count small enough (dozens, not thousands) that a canvas
+simulation is smooth and far more interactive — you can drag nodes and click to
+re-centre. Edges are styled by provenance (solid wikilinks, confidence-graded
+typed relations, faint never-persisted similarity edges), there is a time
+scrubber over `first_seen`, and click-through opens the note in Obsidian.
 
 ## Build order
 
-1. **Vault index + retrieval + ask box.** No capture. ← *current*
-2. App-focus + browser capture → episodic timeline. No LLM.
-3. Rollup → proposed notes → review queue.
-4. Graph view.
-5. Routine mining, proactive nudges.
+1. **Vault index + retrieval + ask box.** No capture. ✓
+2. App-focus + browser capture → episodic timeline. No LLM. ✓
+3. Rollup → proposed notes → review queue. ✓
+4. Graph view. ✓
+5. Routine mining, proactive nudges. ✓
+
+All five steps implemented, plus a secretary layer, calendar capture, model
+router/BYOK, tutor and (dormant) business flavors, a diagnostic placement quiz,
+spaced-repetition flashcards, screen recording → notes, and a conversational
+streaming agent.
 
 ## Known failure modes
 

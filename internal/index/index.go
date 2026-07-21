@@ -21,12 +21,13 @@ import (
 
 const schema = `
 CREATE TABLE IF NOT EXISTS notes (
-    slug  TEXT PRIMARY KEY,
-    path  TEXT NOT NULL,
-    title TEXT NOT NULL,
-    kind  TEXT NOT NULL,
-    body  TEXT NOT NULL,
-    hash  TEXT NOT NULL
+    slug       TEXT PRIMARY KEY,
+    path       TEXT NOT NULL,
+    title      TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    body       TEXT NOT NULL,
+    hash       TEXT NOT NULL,
+    first_seen INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS aliases (
     slug  TEXT NOT NULL REFERENCES notes(slug) ON DELETE CASCADE,
@@ -82,7 +83,15 @@ func Open(vaultDir string) (*Index, error) {
 	if _, err := db.Exec(ftsSchema); err != nil {
 		return nil, err
 	}
+	migrate(db)
 	return &Index{Vault: vaultDir, DB: db}, nil
+}
+
+// migrate adds columns to databases created before they existed. ALTER TABLE
+// ADD COLUMN is idempotent-safe here because we swallow the "duplicate column"
+// error — cheaper and clearer than querying the schema first.
+func migrate(db *sql.DB) {
+	db.Exec("ALTER TABLE notes ADD COLUMN first_seen INTEGER NOT NULL DEFAULT 0")
 }
 
 func (ix *Index) Close() error { return ix.DB.Close() }
@@ -143,10 +152,10 @@ func (ix *Index) Sync() (SyncReport, error) {
 		}
 
 		if _, err := tx.Exec(
-			`INSERT INTO notes (slug, path, title, kind, body, hash) VALUES (?,?,?,?,?,?)
+			`INSERT INTO notes (slug, path, title, kind, body, hash, first_seen) VALUES (?,?,?,?,?,?,?)
 			 ON CONFLICT(slug) DO UPDATE SET path=excluded.path, title=excluded.title,
-			   kind=excluded.kind, body=excluded.body, hash=excluded.hash`,
-			n.Slug, n.Path, n.Title, n.Kind, n.Body, n.Hash,
+			   kind=excluded.kind, body=excluded.body, hash=excluded.hash, first_seen=excluded.first_seen`,
+			n.Slug, n.Path, n.Title, n.Kind, n.Body, n.Hash, n.FirstSeen,
 		); err != nil {
 			return rep, err
 		}
