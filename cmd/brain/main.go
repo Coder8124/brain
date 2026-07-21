@@ -30,8 +30,11 @@ func usage() {
 	fmt.Fprintf(os.Stderr, `brain — local-first second brain
 
 USAGE
+    brain mode [secretary|tutor|business]   switch or show the active flavor
+    brain tutor [study|quiz <topic> | screen on|off | help]   study features
+    brain business [tools | trends <q> | mcp add <name> <cmd...>]   MCP data work
     brain brief                       what the secretary thinks you should know now
-    brain loop [add|done|drop]        manage open loops (commitments)
+    brain jot <thought>               braindump: capture and auto-file a thought\n    brain loop [add|done|drop]        manage open loops (commitments)
     brain doctor [--probe]            list runtimes and tiers; --probe loads each model
     brain key set|rm <ref>            manage API keys in the macOS keychain
     brain index [--watch]             sync vault into the cache and embed
@@ -84,10 +87,18 @@ func main() {
 		err = runRollup(flagStr(args, "--date", ""), hasFlag(args, "--dry-run"))
 	case cmd == "review":
 		err = runReview(hasFlag(args, "--all"))
+	case cmd == "mode":
+		err = modeCmd(args)
+	case cmd == "tutor":
+		err = tutorCmd(args)
+	case cmd == "business":
+		err = businessCmd(args)
 	case cmd == "brief":
 		err = runBrief()
 	case cmd == "loop":
 		err = commitmentCmd(args)
+	case cmd == "jot" && rest != "":
+		err = jotCmd(rest)
 	case cmd == "routines":
 		err = runRoutines(flagInt(args, "--days", 60), hasFlag(args, "--propose"))
 	case cmd == "prune":
@@ -345,7 +356,7 @@ func search(query string) error {
 		return err
 	}
 
-	hits, err := ix.Search(p, env("BRAIN_EMBED", defaultEmbedModel), query, 8)
+	hits, err := ix.HybridSearch(p, env("BRAIN_EMBED", defaultEmbedModel), query, 8)
 	if err != nil {
 		return err
 	}
@@ -433,6 +444,16 @@ func runCapture(daemon bool, backfillDays int) error {
 	pullTicker := time.NewTicker(5 * time.Minute)
 	defer pullTicker.Stop()
 
+	// The tutor screen watcher runs on its own slow cadence and only does
+	// anything in tutor mode with screen notes on — it re-checks each tick, so
+	// switching flavors mid-run just works.
+	screen, screenErr := newScreenWatcher(ix, ix.Vault, scratchDir(ix.Vault))
+	if screenErr == nil && screen.enabled() {
+		fmt.Println("· tutor screen notes active")
+	}
+	screenTicker := time.NewTicker(3 * time.Minute)
+	defer screenTicker.Stop()
+
 	for {
 		select {
 		case <-stop:
@@ -460,8 +481,45 @@ func runCapture(daemon bool, backfillDays int) error {
 			} else if n > 0 {
 				fmt.Printf("+%d events\n", n)
 			}
+
+		case <-screenTicker.C:
+			if screenErr == nil {
+				if msg := screen.tick(); msg != "" {
+					fmt.Printf("· %s — `brain review`\n", msg)
+				}
+			}
 		}
 	}
+}
+
+// tutorHelp captures the screen and gives coaching for whatever the student is
+// stuck on. The CLI counterpart to the app's idle-help overlay.
+func tutorHelp() error {
+	ix, err := openIndex()
+	if err != nil {
+		return err
+	}
+	defer ix.Close()
+	rt, err := openRouter()
+	if err != nil {
+		return err
+	}
+
+	text, err := sources.CaptureScreenText(scratchDir(ix.Vault))
+	if err != nil {
+		return fmt.Errorf("couldn't read the screen (Screen Recording permission?): %w", err)
+	}
+	if !tutorLooksStudious(text) {
+		fmt.Println("nothing studious on screen to help with right now.")
+		return nil
+	}
+
+	guidance, err := tutorHelpText(rt, text)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n%s\n", strings.TrimSpace(guidance))
+	return nil
 }
 
 func timeline(verbose bool) error {

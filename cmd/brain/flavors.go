@@ -1,0 +1,369 @@
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/pragun/brain/internal/business"
+	"github.com/pragun/brain/internal/flavor"
+	"github.com/pragun/brain/internal/rollup"
+	"github.com/pragun/brain/internal/router"
+	"github.com/pragun/brain/internal/secretary"
+	"github.com/pragun/brain/internal/tutor"
+)
+
+// modeCmd switches or reports the active flavor.
+func modeCmd(args []string) error {
+	cfg, err := flavor.Load(vaultPath())
+	if err != nil {
+		return err
+	}
+
+	if len(args) == 0 {
+		fmt.Printf("active: %s — %s\n\n", cfg.Active, cfg.Active.Describe())
+		for _, f := range flavor.All() {
+			mark := "  "
+			if f == cfg.Active {
+				mark = "* "
+			}
+			fmt.Printf("%s%-10s %s\n", mark, f, f.Describe())
+		}
+		return nil
+	}
+
+	f, err := flavor.Parse(args[0])
+	if err != nil {
+		return err
+	}
+	cfg.Active = f
+	if err := cfg.Save(vaultPath()); err != nil {
+		return err
+	}
+	fmt.Printf("switched to %s — %s\n", f, f.Describe())
+	if f == flavor.Tutor && !cfg.ScreenNotes {
+		fmt.Println("note: screen notes are off. `brain tutor screen on` to let it take notes off your screen.")
+	}
+	return nil
+}
+
+func openRouter() (*router.Router, error) {
+	cfg, err := router.Load(vaultPath())
+	if err != nil {
+		return nil, err
+	}
+	return router.New(cfg, vaultPath())
+}
+
+// tutorCmd drives study features: questions, summaries, screen toggle.
+func tutorCmd(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: brain tutor [study <topic> | quiz <topic> | screen on|off]")
+	}
+
+	switch args[0] {
+	case "screen":
+		return tutorScreenToggle(args[1:])
+	case "study", "summary":
+		return tutorStudy(strings.Join(args[1:], " "))
+	case "quiz", "questions":
+		return tutorQuiz(strings.Join(args[1:], " "))
+	case "help":
+		return tutorHelp()
+	case "cards":
+		return tutorCards(strings.Join(args[1:], " "))
+	case "review":
+		return tutorReview()
+	}
+	return fmt.Errorf("usage: brain tutor [study <topic> | quiz <topic> | screen on|off]")
+}
+
+func tutorScreenToggle(args []string) error {
+	cfg, err := flavor.Load(vaultPath())
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 {
+		state := "off"
+		if cfg.ScreenNotes {
+			state = "on"
+		}
+		fmt.Printf("screen notes: %s\n", state)
+		return nil
+	}
+	cfg.ScreenNotes = args[0] == "on"
+	if err := cfg.Save(vaultPath()); err != nil {
+		return err
+	}
+	if cfg.ScreenNotes {
+		fmt.Println("screen notes on. In tutor mode, `brain capture --daemon` will note studious screens.")
+		fmt.Println("this needs Screen Recording permission and captures nothing outside tutor mode.")
+	} else {
+		fmt.Println("screen notes off.")
+	}
+	return nil
+}
+
+func tutorStudy(topic string) error {
+	if topic == "" {
+		return fmt.Errorf("usage: brain tutor study <topic>")
+	}
+	ix, err := openIndex()
+	if err != nil {
+		return err
+	}
+	defer ix.Close()
+	rt, err := openRouter()
+	if err != nil {
+		return err
+	}
+
+	digest, sources, err := tutor.Summarize(ix, rt, topic)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n%s\n\n─── from ───\n", digest)
+	for _, s := range sources {
+		fmt.Printf("  %s\n", s)
+	}
+	return nil
+}
+
+func tutorQuiz(topic string) error {
+	if topic == "" {
+		return fmt.Errorf("usage: brain tutor quiz <topic>")
+	}
+	ix, err := openIndex()
+	if err != nil {
+		return err
+	}
+	defer ix.Close()
+	rt, err := openRouter()
+	if err != nil {
+		return err
+	}
+
+	cards, err := tutor.Questions(ix, rt, topic, 5)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n%d questions on %q — answers below each.\n\n", len(cards), topic)
+	for i, c := range cards {
+		fmt.Printf("%d. %s\n   → %s  [%s]\n\n", i+1, c.Q, c.A, c.Source)
+	}
+	return nil
+}
+
+// businessCmd drives MCP-backed data work.
+func businessCmd(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: brain business [tools | trends <question> | mcp add <name> <command...>]")
+	}
+	cfg, err := flavor.Load(vaultPath())
+	if err != nil {
+		return err
+	}
+
+	switch args[0] {
+	case "mcp":
+		return businessMCPAdd(cfg, args[1:])
+	case "tools":
+		return businessTools(cfg)
+	case "trends":
+		return businessTrends(cfg, strings.Join(args[1:], " "))
+	}
+	return fmt.Errorf("usage: brain business [tools | trends <question> | mcp add <name> <command...>]")
+}
+
+func businessMCPAdd(cfg *flavor.Config, args []string) error {
+	if len(args) < 3 || args[0] != "add" {
+		return fmt.Errorf("usage: brain business mcp add <name> <command> [args...]")
+	}
+	cfg.MCP = append(cfg.MCP, flavor.MCPServer{Name: args[1], Command: args[2], Args: args[3:]})
+	if err := cfg.Save(vaultPath()); err != nil {
+		return err
+	}
+	fmt.Printf("added MCP server %q\n", args[1])
+	return nil
+}
+
+func businessTools(cfg *flavor.Config) error {
+	if len(cfg.MCP) == 0 {
+		return fmt.Errorf("no MCP servers — add one with `brain business mcp add <name> <command...>`")
+	}
+	tools, err := business.Discover(cfg.MCP)
+	if err != nil {
+		return err
+	}
+	for server, list := range tools {
+		fmt.Printf("%s\n", server)
+		for _, tl := range list {
+			fmt.Printf("  %-24s %s\n", tl.Name, tl.Description)
+		}
+	}
+	return nil
+}
+
+func businessTrends(cfg *flavor.Config, question string) error {
+	if len(cfg.MCP) == 0 {
+		return fmt.Errorf("no MCP servers — add one with `brain business mcp add <name> <command...>`")
+	}
+
+	// Call every tool on every configured server. For a focused query the user
+	// can narrow the servers in config; this keeps the command itself simple.
+	var calls []business.ToolCall
+	discovered, err := business.Discover(cfg.MCP)
+	if err != nil {
+		return err
+	}
+	for server, list := range discovered {
+		for _, tl := range list {
+			calls = append(calls, business.ToolCall{Server: server, Tool: tl.Name})
+		}
+	}
+
+	sources, err := business.Gather(cfg.MCP, calls)
+	if err != nil {
+		return err
+	}
+	rt, err := openRouter()
+	if err != nil {
+		return err
+	}
+
+	summary, err := business.TrendSummary(rt, question, sources)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n%s\n", strings.TrimSpace(summary))
+	return nil
+}
+
+// thin aliases so main.go's tutorHelp does not import tutor directly.
+func tutorLooksStudious(text string) bool { return tutor.LooksStudious(text) }
+
+func tutorHelpText(rt *router.Router, text string) (string, error) { return tutor.Help(rt, text) }
+
+// tutorCards generates questions on a topic and files them into the SRS deck.
+func tutorCards(topic string) error {
+	if topic == "" {
+		return fmt.Errorf("usage: brain tutor cards <topic>")
+	}
+	ix, err := openEvents()
+	if err != nil {
+		return err
+	}
+	defer ix.Close()
+	if err := tutor.InitDeck(ix.DB); err != nil {
+		return err
+	}
+	rt, err := openRouter()
+	if err != nil {
+		return err
+	}
+
+	cards, err := tutor.Questions(ix, rt, topic, 6)
+	if err != nil {
+		return err
+	}
+	added := 0
+	for _, c := range cards {
+		if ok, _ := tutor.AddCard(ix.DB, c); ok {
+			added++
+		}
+	}
+	fmt.Printf("added %d cards on %q to your deck — `brain tutor review` when they are due\n", added, topic)
+	return nil
+}
+
+// tutorReview runs the spaced-repetition review of due cards.
+func tutorReview() error {
+	ix, err := openEvents()
+	if err != nil {
+		return err
+	}
+	defer ix.Close()
+	if err := tutor.InitDeck(ix.DB); err != nil {
+		return err
+	}
+
+	now := time.Now()
+	due, err := tutor.Due(ix.DB, now, 30)
+	if err != nil {
+		return err
+	}
+	if len(due) == 0 {
+		fmt.Println("no cards due — nothing to review.")
+		return nil
+	}
+
+	fmt.Printf("%d cards due. For each: press enter to see the answer, then rate 1 (again) 2 (good) 3 (easy).\n\n", len(due))
+	in := bufio.NewReader(os.Stdin)
+	reviewed := 0
+
+	for i, c := range due {
+		fmt.Printf("[%d/%d] %s\n", i+1, len(due), c.Q)
+		fmt.Print("      (enter to reveal) ")
+		in.ReadString('\n')
+		fmt.Printf("      → %s\n", c.A)
+
+		fmt.Print("      rate 1/2/3 (q to stop): ")
+		line, err := in.ReadString('\n')
+		if err != nil {
+			break
+		}
+		switch strings.TrimSpace(line) {
+		case "1":
+			tutor.Review(ix.DB, c.ID, tutor.Again, now)
+		case "3":
+			tutor.Review(ix.DB, c.ID, tutor.Easy, now)
+		case "q":
+			fmt.Printf("\nreviewed %d cards.\n", reviewed)
+			return nil
+		default:
+			tutor.Review(ix.DB, c.ID, tutor.Good, now)
+		}
+		reviewed++
+		fmt.Println()
+	}
+	fmt.Printf("reviewed %d cards.\n", reviewed)
+	return nil
+}
+
+// jotCmd is braindump: capture a raw thought and let the system file it.
+func jotCmd(text string) error {
+	if text == "" {
+		return fmt.Errorf("usage: brain jot <thought>")
+	}
+	ix, err := openEvents()
+	if err != nil {
+		return err
+	}
+	defer ix.Close()
+	if err := rollup.InitQueue(ix.DB); err != nil {
+		return err
+	}
+	if err := secretary.Init(ix.DB); err != nil {
+		return err
+	}
+	rt, err := openRouter()
+	if err != nil {
+		return err
+	}
+
+	prop, kind, err := rollup.Braindump(ix.DB, rt, text)
+	if err != nil {
+		return err
+	}
+	if kind == "task" {
+		// A task becomes an open loop directly — that is where the secretary
+		// looks, and it is exactly the "thing I need to do" case.
+		secretary.Add(ix.DB, &secretary.Commitment{Text: strings.TrimSpace(text)})
+		fmt.Println("filed as an open loop — see `brain brief`")
+		return nil
+	}
+	fmt.Printf("filed as %s → %s — `brain review` to confirm\n", kind, prop.Target)
+	return nil
+}

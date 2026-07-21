@@ -51,6 +51,15 @@ func (a *App) open() (*index.Index, error) {
 	return ix, nil
 }
 
+// router builds a model router for the vault, shared by the flavor bindings.
+func (a *App) router() (*router.Router, error) {
+	cfg, err := router.Load(a.vault)
+	if err != nil {
+		return nil, err
+	}
+	return router.New(cfg, a.vault)
+}
+
 // Brief is what the app leads with: the secretary speaking first. This is the
 // method that makes the product a secretary rather than an archive — the panel
 // opens on this, not on an ask box.

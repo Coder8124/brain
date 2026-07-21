@@ -79,6 +79,9 @@ func Open(vaultDir string) (*Index, error) {
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err
 	}
+	if _, err := db.Exec(ftsSchema); err != nil {
+		return nil, err
+	}
 	return &Index{Vault: vaultDir, DB: db}, nil
 }
 
@@ -159,6 +162,16 @@ func (ix *Index) Sync() (SyncReport, error) {
 			}
 		}
 
+		// Keep the FTS row in step with the note inside the same transaction, so
+		// lexical and semantic search never see different vaults.
+		if _, err := tx.Exec("DELETE FROM notes_fts WHERE slug = ?", n.Slug); err != nil {
+			return rep, err
+		}
+		if _, err := tx.Exec("INSERT INTO notes_fts (slug, title, body) VALUES (?,?,?)",
+			n.Slug, n.Title, n.Body); err != nil {
+			return rep, err
+		}
+
 		for _, a := range n.Aliases {
 			if _, err := tx.Exec("INSERT INTO aliases (slug, alias) VALUES (?,?)", n.Slug, a); err != nil {
 				return rep, err
@@ -195,6 +208,11 @@ func (ix *Index) Sync() (SyncReport, error) {
 
 	for _, slug := range stale {
 		if _, err := tx.Exec("DELETE FROM notes WHERE slug = ?", slug); err != nil {
+			return rep, err
+		}
+		// FTS is not wired to the notes table by a foreign key (it is a virtual
+		// table), so it must be cleaned up explicitly.
+		if _, err := tx.Exec("DELETE FROM notes_fts WHERE slug = ?", slug); err != nil {
 			return rep, err
 		}
 		rep.Removed++
