@@ -6,6 +6,7 @@
 package provider
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,12 @@ import (
 	"strings"
 	"time"
 )
+
+// Msg is one turn in a conversation.
+type Msg struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
 
 // LocalEndpoint is a runtime we know how to find without configuration.
 type LocalEndpoint struct {
@@ -173,4 +180,75 @@ func (p *Provider) Chat(model, system, user string, schema map[string]any) (stri
 		return "", fmt.Errorf("no choices returned")
 	}
 	return res.Choices[0].Message.Content, nil
+}
+
+// ChatStream runs a multi-turn completion and streams tokens to onToken as they
+// arrive. This is what makes the assistant feel alive: a 40-second answer that
+// appears word by word reads as thinking, while the same answer delivered in
+// one silent lump reads as broken.
+//
+// Returns the full assembled text so callers can persist the turn.
+func (p *Provider) ChatStream(model string, messages []Msg, onToken func(string)) (string, error) {
+	body := map[string]any{
+		"model":       model,
+		"messages":    messages,
+		"temperature": 0.4,
+		"stream":      true,
+	}
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequest("POST", p.BaseURL+"/chat/completions", bytes.NewReader(buf))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if p.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+p.APIKey)
+	}
+
+	res, err := p.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("%s unreachable at %s: %w", p.Name, p.BaseURL, err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		var detail bytes.Buffer
+		detail.ReadFrom(res.Body)
+		return "", fmt.Errorf("%s returned %s: %s", p.Name, res.Status, strings.TrimSpace(detail.String()))
+	}
+
+	// OpenAI-compatible streaming is server-sent events: "data: {json}" lines
+	// terminated by "data: [DONE]".
+	sc := bufio.NewScanner(res.Body)
+	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	var full strings.Builder
+
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "[DONE]" {
+			break
+		}
+		var chunk struct {
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if json.Unmarshal([]byte(data), &chunk) != nil || len(chunk.Choices) == 0 {
+			continue
+		}
+		if tok := chunk.Choices[0].Delta.Content; tok != "" {
+			full.WriteString(tok)
+			onToken(tok)
+		}
+	}
+	return full.String(), sc.Err()
 }
