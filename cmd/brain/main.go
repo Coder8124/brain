@@ -34,7 +34,7 @@ USAGE
     brain tutor [diagnostic <subject> | study|quiz <topic> | cards|review | screen on|off | help]
     brain business [tools | trends <q> | mcp add <name> <cmd...>]   MCP data work
     brain brief                       what the secretary thinks you should know now
-    brain jot <thought>               braindump: capture and auto-file a thought\n    brain loop [add|done|drop]        manage open loops (commitments)
+    brain jot <thought>               braindump: capture and auto-file a thought\n    brain record [--name X] [--no-video]   record a study session into notes\n    brain loop [add|done|drop]        manage open loops (commitments)
     brain doctor [--probe]            list runtimes and tiers; --probe loads each model
     brain key set|rm <ref>            manage API keys in the macOS keychain
     brain index [--watch]             sync vault into the cache and embed
@@ -99,6 +99,8 @@ func main() {
 		err = commitmentCmd(args)
 	case cmd == "jot" && rest != "":
 		err = jotCmd(rest)
+	case cmd == "record":
+		err = runRecord(flagStr(args, "--name", ""), hasFlag(args, "--no-video"))
 	case cmd == "routines":
 		err = runRoutines(flagInt(args, "--days", 60), hasFlag(args, "--propose"))
 	case cmd == "prune":

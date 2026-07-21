@@ -3,6 +3,7 @@ module github.com/pragun/brain
 go 1.26.5
 
 require (
+	golang.design/x/hotkey v0.6.1
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.54.0
 )
