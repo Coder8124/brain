@@ -120,3 +120,58 @@ func contains(s, sub string) bool {
 	}
 	return false
 }
+
+func TestEffectiveSalienceDecaysWithAge(t *testing.T) {
+	now := int64(1_000_000_000)
+	fresh := Memory{Salience: 0.8, Created: now, LastUsed: now}
+	old := Memory{Salience: 0.8, Created: now - int64(180*86400), LastUsed: now - int64(180*86400)}
+	if EffectiveSalience(fresh, now) <= EffectiveSalience(old, now) {
+		t.Error("a fresh memory should outrank an equally-salient stale one")
+	}
+	// Two half-lives (180d) → ~1/4 of original.
+	if e := EffectiveSalience(old, now); e > 0.3 {
+		t.Errorf("after ~2 half-lives salience should be ~0.2, got %v", e)
+	}
+}
+
+func TestReinforcementResistsDecay(t *testing.T) {
+	now := int64(1_000_000_000)
+	used := Memory{Salience: 0.8, Created: now - int64(90*86400), LastUsed: now - int64(90*86400), Uses: 8}
+	unused := Memory{Salience: 0.8, Created: now - int64(90*86400), LastUsed: now - int64(90*86400), Uses: 0}
+	if EffectiveSalience(used, now) <= EffectiveSalience(unused, now) {
+		t.Error("an often-recalled memory should resist decay better than an unused one")
+	}
+}
+
+func TestSupersededMemoriesAreNotRecalled(t *testing.T) {
+	db := testDB(t)
+	storeVec(t, db, "lives in NYC", Fact, 0.5, []float32{1, 0, 0})
+	storeVec(t, db, "lives in Boston", Fact, 0.5, []float32{1, 0.02, 0})
+	// Supersede the NYC memory (as Consolidate would on a knowledge update).
+	db.Exec("UPDATE memories SET superseded = 1 WHERE text = 'lives in NYC'")
+
+	got, _ := recallByVec(db, []float32{1, 0, 0}, 5)
+	for _, m := range got {
+		if m.Text == "lives in NYC" {
+			t.Error("a superseded memory must not be recalled — the current fact should win")
+		}
+	}
+	if len(got) == 0 || got[0].Text != "lives in Boston" {
+		t.Errorf("recall should return the current fact, got %+v", got)
+	}
+}
+
+func TestSurfaceReturnsTopByKind(t *testing.T) {
+	db := testDB(t)
+	storeVec(t, db, "prefers short emails", Preference, 0.9, []float32{1, 0, 0})
+	storeVec(t, db, "launching in Q4", Context, 0.6, []float32{0, 1, 0})
+	storeVec(t, db, "some trivia", Fact, 0.2, []float32{0, 0, 1})
+
+	prefs, _ := Surface(db, []Kind{Preference, Context}, 5)
+	if len(prefs) != 2 {
+		t.Fatalf("Surface should return the 2 preference/context memories, got %d", len(prefs))
+	}
+	if prefs[0].Text != "prefers short emails" {
+		t.Errorf("most salient should lead, got %q", prefs[0].Text)
+	}
+}

@@ -48,6 +48,7 @@ type Memory struct {
 	LastUsed int64   `json:"last_used"`
 	Uses     int     `json:"uses"`
 	Score    float64 `json:"score"` // set on recall: relevance to the query
+	vec      []byte  // embedding, loaded only for consolidation; not serialised
 }
 
 const Schema = `
@@ -61,14 +62,19 @@ CREATE TABLE IF NOT EXISTS memories (
     last_used   INTEGER NOT NULL DEFAULT 0,
     uses        INTEGER NOT NULL DEFAULT 0,
     vec         BLOB,
-    fingerprint TEXT UNIQUE
+    fingerprint TEXT UNIQUE,
+    superseded  INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS memories_kind ON memories(kind);
 `
 
 func Init(db *sql.DB) error {
-	_, err := db.Exec(Schema)
-	return err
+	if _, err := db.Exec(Schema); err != nil {
+		return err
+	}
+	// Migration for stores created before superseding existed.
+	db.Exec("ALTER TABLE memories ADD COLUMN superseded INTEGER NOT NULL DEFAULT 0")
+	return nil
 }
 
 func fingerprint(text string) string {
@@ -136,7 +142,7 @@ func Recall(db *sql.DB, p *provider.Provider, embedModel, query string, k int) (
 // recallByVec ranks stored memories against a query vector. Salience nudges the
 // ranking so a high-importance memory beats a marginally-closer trivial one.
 func recallByVec(db *sql.DB, query []float32, k int) ([]Memory, error) {
-	rows, err := db.Query(`SELECT id, text, kind, salience, source, created, last_used, uses, vec FROM memories`)
+	rows, err := db.Query(`SELECT id, text, kind, salience, source, created, last_used, uses, vec FROM memories WHERE superseded = 0`)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +161,10 @@ func recallByVec(db *sql.DB, query []float32, k int) ([]Memory, error) {
 			continue
 		}
 		sim := cosine(query, blobToFloats(vec))
-		m.Score = sim*0.85 + m.Salience*0.15
+		// Rank on similarity plus how much the memory currently matters —
+		// effective salience folds in decay and reinforcement, so a fresh,
+		// often-recalled memory outranks a stale one it ties with on content.
+		m.Score = sim*0.82 + EffectiveSalience(m, time.Now().Unix())*0.18
 		mems = append(mems, m)
 	}
 	sortByScore(mems)

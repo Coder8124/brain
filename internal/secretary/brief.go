@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pragun/brain/internal/capture"
+	"github.com/pragun/brain/internal/memory"
 	"github.com/pragun/brain/internal/routine"
 )
 
@@ -18,12 +19,13 @@ import (
 // a brief, so it is instant and it works offline. The model's only role is the
 // upstream extraction of commitments; surfacing them is deterministic.
 type Brief struct {
-	Greeting string    `json:"greeting"`
-	Upcoming []Meeting `json:"upcoming"`
-	Loops    []Loop    `json:"loops"`
-	Dormant  []Nudge   `json:"dormant"`
-	Usual    []Nudge   `json:"usual"`
-	Review   int       `json:"review"`
+	Greeting  string    `json:"greeting"`
+	Upcoming  []Meeting `json:"upcoming"`
+	Loops     []Loop    `json:"loops"`
+	Dormant   []Nudge   `json:"dormant"`
+	Usual     []Nudge   `json:"usual"`
+	Remembers []string  `json:"remembers"` // standing preferences/context worth keeping in mind
+	Review    int       `json:"review"`
 }
 
 // Meeting is a calendar event coming up soon. The most time-sensitive thing a
@@ -57,6 +59,7 @@ type Nudge struct {
 func Compose(db *sql.DB, now time.Time) (Brief, error) {
 	var b Brief
 	b.Greeting = greeting(now)
+	memory.Init(db)
 
 	// --- what's coming up: the most time-sensitive thing, so it leads ---
 	// Read from the store, not live from EventKit, so the brief stays instant
@@ -122,6 +125,16 @@ func Compose(db *sql.DB, now time.Time) (Brief, error) {
 		b.Usual = append(b.Usual, n)
 		if len(b.Usual) >= 3 {
 			break
+		}
+	}
+
+	// --- standing preferences and context the assistant keeps in mind ---
+	// This is what makes the brief feel like it knows you: the high-salience
+	// things it has learned, surfaced without being asked. The "context
+	// management" a good secretary has, from persistent memory.
+	if mems, err := memory.Surface(db, []memory.Kind{memory.Preference, memory.Context}, 3); err == nil {
+		for _, m := range mems {
+			b.Remembers = append(b.Remembers, m.Text)
 		}
 	}
 

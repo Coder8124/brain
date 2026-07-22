@@ -90,6 +90,13 @@ func runBrief() error {
 		}
 	}
 
+	if len(b.Remembers) > 0 {
+		fmt.Println("\nKeeping in mind")
+		for _, m := range b.Remembers {
+			fmt.Printf("  · %s\n", m)
+		}
+	}
+
 	if b.Review > 0 {
 		fmt.Printf("\n%d proposal(s) waiting — `brain review`\n", b.Review)
 	}

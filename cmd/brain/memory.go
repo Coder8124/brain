@@ -59,6 +59,18 @@ func memoryCmd(args []string) error {
 			return err
 		}
 		fmt.Println("remembered.")
+	case "consolidate":
+		rt, err := openRouter()
+		if err != nil {
+			return err
+		}
+		d, _ := memory.Decay(ix.DB, time.Now().Unix())
+		m, s, err := memory.Consolidate(ix.DB, rt)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("decayed %d · merged %d duplicates · superseded %d outdated\n", d, m, s)
+		return nil
 	case "forget":
 		id := parseID(args)
 		if id == 0 {
