@@ -11,8 +11,10 @@ import (
 	"sort"
 	"time"
 
+	"github.com/pragun/brain/internal/action"
 	"github.com/pragun/brain/internal/capture"
 	"github.com/pragun/brain/internal/index"
+	"github.com/pragun/brain/internal/memory"
 	"github.com/pragun/brain/internal/rollup"
 	"github.com/pragun/brain/internal/router"
 	"github.com/pragun/brain/internal/routine"
@@ -158,6 +160,8 @@ type Status struct {
 	Pending   int    `json:"pending"`
 	Runtime   string `json:"runtime"`
 	Recording bool   `json:"recording"`
+	Actions   int    `json:"actions"`
+	Memories  int    `json:"memories"`
 }
 
 type TimelineItem struct {
@@ -190,6 +194,12 @@ func (a *App) Status() (Status, error) {
 	s.Edges, _ = ix.EdgeCount()
 	s.Events, _ = capture.Count(ix.DB)
 	s.Pending, _ = rollup.PendingCount(ix.DB)
+	if action.Init(ix.DB) == nil {
+		s.Actions, _ = action.PendingCount(ix.DB)
+	}
+	if memory.Init(ix.DB) == nil {
+		s.Memories, _ = memory.Count(ix.DB)
+	}
 	s.Recording = recorderRunning()
 
 	if cfg, err := router.Load(a.vault); err == nil {
