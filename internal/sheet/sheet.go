@@ -265,3 +265,25 @@ func money(v float64) string {
 func base(path string) string {
 	return strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 }
+
+// ParseNumber exposes the spreadsheet number parser to sibling packages that
+// run their own deterministic checks (verification, forecasting).
+func ParseNumber(s string) (float64, bool) { return parseNumber(s) }
+
+// Numeric reports whether a column (by header name) reads as numeric, and
+// returns its values in row order — the raw material for forecasting a series.
+func (t Table) NumericSeries(column string) ([]float64, bool) {
+	c := t.columnIndex(column)
+	if c < 0 {
+		return nil, false
+	}
+	var vals []float64
+	for _, row := range t.Rows {
+		if c < len(row) {
+			if v, ok := parseNumber(row[c]); ok {
+				vals = append(vals, v)
+			}
+		}
+	}
+	return vals, len(vals) > 0
+}

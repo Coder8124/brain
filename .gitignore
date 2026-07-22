@@ -12,3 +12,4 @@ app/vault/
 vault/recordings/
 vault/sources/
 vault/.brain/scratch/
+vault/business/

@@ -32,7 +32,7 @@ func usage() {
 USAGE
     brain mode [secretary|tutor|business]   switch or show the active flavor
     brain tutor [diagnostic <subject> | study|quiz <topic> | cards|review | screen on|off | help]
-    brain business [read|analyze <file> | agent <goal> | trends <q> | tools | mcp add ...]
+    brain business [read|analyze|verify <file> | forecast <file> <col> | agent <goal> | ...]
     brain brief                       what the secretary thinks you should know now
     brain jot <thought>               braindump: capture and auto-file a thought\n    brain record [--name X] [--no-video]   record a study session into notes\n    brain graph [focus] [--hops N] [--similar]   memory graph around a note\n    brain loop [add|done|drop]        manage open loops (commitments)
     brain doctor [--probe]            list runtimes and tiers; --probe loads each model
