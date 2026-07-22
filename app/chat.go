@@ -47,6 +47,13 @@ func (a *App) Send(message string) {
 			return
 		}
 		runtime.EventsEmit(a.ctx, "chat:done", "")
+
+		// The reply is delivered; now quietly learn any durable facts from it,
+		// while this handle is still open. Persistent memory is what makes the
+		// next session start already knowing the user.
+		if n, _ := agent.Learn(ix.DB, rt, conversation); n > 0 {
+			runtime.EventsEmit(a.ctx, "memory:learned", n)
+		}
 	}()
 }
 

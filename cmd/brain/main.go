@@ -34,7 +34,7 @@ USAGE
     brain tutor [diagnostic <subject> | study|quiz <topic> | cards|review | screen on|off | help]
     brain business [read|analyze|verify <file> | forecast <file> <col> | agent <goal> | ...]
     brain brief                       what the secretary thinks you should know now
-    brain jot <thought>               braindump: capture and auto-file a thought\n    brain record [--name X] [--no-video]   record a study session into notes\n    brain graph [focus] [--hops N] [--similar]   memory graph around a note\n    brain loop [add|done|drop]        manage open loops (commitments)
+    brain jot <thought>               braindump: capture and auto-file a thought\n    brain memory [add <fact>|forget <id>]   the assistant's persistent memory\n    brain record [--name X] [--no-video]   record a study session into notes\n    brain graph [focus] [--hops N] [--similar]   memory graph around a note\n    brain loop [add|done|drop]        manage open loops (commitments)
     brain doctor [--probe]            list runtimes and tiers; --probe loads each model
     brain key set|rm <ref>            manage API keys in the macOS keychain
     brain index [--watch]             sync vault into the cache and embed
@@ -99,6 +99,8 @@ func main() {
 		err = commitmentCmd(args)
 	case cmd == "jot" && rest != "":
 		err = jotCmd(rest)
+	case cmd == "memory":
+		err = memoryCmd(args)
 	case cmd == "record":
 		err = runRecord(flagStr(args, "--name", ""), hasFlag(args, "--no-video"))
 	case cmd == "graph":

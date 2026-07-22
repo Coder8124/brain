@@ -92,6 +92,18 @@ func Open(vaultDir string) (*Index, error) {
 // error — cheaper and clearer than querying the schema first.
 func migrate(db *sql.DB) {
 	db.Exec("ALTER TABLE notes ADD COLUMN first_seen INTEGER NOT NULL DEFAULT 0")
+
+	// FTS backfill: notes indexed before the FTS table existed never populated
+	// it, and Sync only refreshes FTS for notes whose content changed — so a
+	// vault whose notes are all unchanged would have empty lexical search.
+	// Rebuild it once when it is out of step with the notes table.
+	var notesN, ftsN int
+	db.QueryRow("SELECT COUNT(*) FROM notes").Scan(&notesN)
+	db.QueryRow("SELECT COUNT(*) FROM notes_fts").Scan(&ftsN)
+	if notesN > 0 && ftsN < notesN {
+		db.Exec("DELETE FROM notes_fts")
+		db.Exec(`INSERT INTO notes_fts (slug, title, body) SELECT slug, title, body FROM notes`)
+	}
 }
 
 func (ix *Index) Close() error { return ix.DB.Close() }
