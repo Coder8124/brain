@@ -182,6 +182,10 @@ func businessCmd(args []string) error {
 		return businessAnalyze(args[1], strings.Join(args[2:], " "))
 	case "agent":
 		return businessAgent(cfg, strings.Join(args[1:], " "))
+	case "verify":
+		return businessVerify(args[1])
+	case "forecast":
+		return businessForecast(args)
 	}
 	return fmt.Errorf("usage: brain business [tools | trends <q> | read <file> | analyze <file> [q] | agent <goal> | mcp add <name> <cmd...>]")
 }
@@ -513,6 +517,7 @@ func businessAgent(cfg *flavor.Config, goal string) error {
 
 	reg := bizagent.NewRegistry()
 	bizagent.RegisterBuiltins(reg)
+	bizagent.RegisterTasks(reg)
 	env := &bizagent.Env{Router: rt, Index: ix, DB: ix.DB, Vault: ix.Vault, MCP: cfg.MCP}
 	runner := bizagent.NewRunner(env, reg)
 
@@ -536,4 +541,37 @@ func jsonArgsShort(args map[string]any) string {
 		parts = append(parts, fmt.Sprintf("%s=%v", k, v))
 	}
 	return strings.Join(parts, ", ")
+}
+
+// businessVerify runs the deterministic finance checks.
+func businessVerify(path string) error {
+	if path == "" {
+		return fmt.Errorf("usage: brain business verify <file>")
+	}
+	rep, err := business.Verify(path)
+	if err != nil {
+		return err
+	}
+	fmt.Print(rep.String())
+	if rep.Failed > 0 {
+		fmt.Printf("\n%d check(s) need attention.\n", rep.Failed)
+	}
+	return nil
+}
+
+// businessForecast projects a column forward, computed exactly.
+func businessForecast(args []string) error {
+	// args: forecast <file> <column> [--periods N] [--method cagr|linear]
+	if len(args) < 3 {
+		return fmt.Errorf("usage: brain business forecast <file> <column> [--periods N] [--method cagr|linear]")
+	}
+	path, column := args[1], args[2]
+	periods := flagInt(args, "--periods", 4)
+	method := flagStr(args, "--method", "cagr")
+	p, err := business.ForecastFile(path, column, periods, method)
+	if err != nil {
+		return err
+	}
+	fmt.Print(p.String())
+	return nil
 }
