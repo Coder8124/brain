@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/pragun/brain/internal/index"
+	"github.com/pragun/brain/internal/memory"
 	"github.com/pragun/brain/internal/provider"
 	"github.com/pragun/brain/internal/router"
 	"github.com/pragun/brain/internal/secretary"
@@ -78,6 +79,17 @@ func Reply(
 		}
 	}
 
+	// --- what the assistant already knows about the user (persistent memory) ---
+	// This is the continuity that makes it a second brain rather than a chatbot:
+	// preferences, people, and standing context recalled from past sessions so
+	// the assistant does not ask twice and can act on what it has learned.
+	var remembered string
+	if err := memory.Init(db); err == nil {
+		if mems, err := memory.Recall(db, rt.Local(), embed, userMsg, 5); err == nil {
+			remembered = memory.Render(mems)
+		}
+	}
+
 	// --- what's on the user's plate right now ---
 	var context strings.Builder
 	if b, err := secretary.Compose(db, time.Now()); err == nil {
@@ -102,8 +114,11 @@ func Reply(
 		"Answer from the notes below when they are relevant, and cite the note slug in " +
 		"square brackets. If the notes do not cover it, say so and answer from general " +
 		"knowledge, clearly. Be brief unless asked to go deep."
+	if remembered != "" {
+		system += "\n\n--- " + remembered
+	}
 	if grounding.Len() > 0 {
-		system += "\n\n--- relevant notes ---\n" + grounding.String()
+		system += "\n--- relevant notes ---\n" + grounding.String()
 	}
 	if context.Len() > 0 {
 		system += "\n--- on the user's plate ---\n" + context.String()
@@ -130,4 +145,21 @@ func Reply(
 	}
 	conv.Turns = append(conv.Turns, Turn{Role: "assistant", Content: full})
 	return full, nil
+}
+
+// Learn extracts durable memories from the most recent exchange and persists
+// them, so the next session starts already knowing them. Kept separate from
+// Reply so the caller controls timing and database lifetime — it runs after the
+// reply is delivered, and a failure to learn never affects the answer. Returns
+// how many new memories were stored.
+func Learn(db *sql.DB, rt *router.Router, conv *Conversation) (int, error) {
+	if len(conv.Turns) < 2 {
+		return 0, nil
+	}
+	if err := memory.Init(db); err != nil {
+		return 0, err
+	}
+	last := conv.Turns[len(conv.Turns)-2:] // the user turn and the reply
+	exchange := last[0].Role + ": " + last[0].Content + "\n" + last[1].Role + ": " + last[1].Content
+	return memory.Learn(db, rt, exchange, "conversation")
 }

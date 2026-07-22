@@ -518,6 +518,8 @@ func businessAgent(cfg *flavor.Config, goal string) error {
 	reg := bizagent.NewRegistry()
 	bizagent.RegisterBuiltins(reg)
 	bizagent.RegisterTasks(reg)
+	bizagent.RegisterGate(reg)                  // the agent can request outbound actions…
+	bizagent.RegisterDefaultExecutors(ix.Vault) // …which only run once approved in `brain review`
 	env := &bizagent.Env{Router: rt, Index: ix, DB: ix.DB, Vault: ix.Vault, MCP: cfg.MCP}
 	runner := bizagent.NewRunner(env, reg)
 
