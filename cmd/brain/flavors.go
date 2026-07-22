@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pragun/brain/internal/bizagent"
 	"github.com/pragun/brain/internal/business"
 	"github.com/pragun/brain/internal/flavor"
 	"github.com/pragun/brain/internal/rollup"
@@ -175,8 +176,14 @@ func businessCmd(args []string) error {
 		return businessTools(cfg)
 	case "trends":
 		return businessTrends(cfg, strings.Join(args[1:], " "))
+	case "read":
+		return businessRead(args[1])
+	case "analyze":
+		return businessAnalyze(args[1], strings.Join(args[2:], " "))
+	case "agent":
+		return businessAgent(cfg, strings.Join(args[1:], " "))
 	}
-	return fmt.Errorf("usage: brain business [tools | trends <question> | mcp add <name> <command...>]")
+	return fmt.Errorf("usage: brain business [tools | trends <q> | read <file> | analyze <file> [q] | agent <goal> | mcp add <name> <cmd...>]")
 }
 
 func businessMCPAdd(cfg *flavor.Config, args []string) error {
@@ -457,4 +464,76 @@ func tutorDiagnostic(subject string) error {
 		fmt.Printf("· added %d cards from what you missed — `brain tutor review` to practice them\n", added)
 	}
 	return nil
+}
+
+// businessRead prints the computed shape of a spreadsheet — no model, exact.
+func businessRead(path string) error {
+	if path == "" {
+		return fmt.Errorf("usage: brain business read <file.xlsx|.csv>")
+	}
+	s, err := business.Summarize(path)
+	if err != nil {
+		return err
+	}
+	fmt.Print(s.String())
+	return nil
+}
+
+// businessAnalyze narrates a spreadsheet's trends, grounded in computed figures.
+func businessAnalyze(path, question string) error {
+	if path == "" {
+		return fmt.Errorf("usage: brain business analyze <file> [question]")
+	}
+	rt, err := openRouter()
+	if err != nil {
+		return err
+	}
+	out, err := business.AnalyzeFile(rt, path, question)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n%s\n", strings.TrimSpace(out))
+	return nil
+}
+
+// businessAgent runs the tool-using harness toward a goal.
+func businessAgent(cfg *flavor.Config, goal string) error {
+	if goal == "" {
+		return fmt.Errorf("usage: brain business agent <goal>")
+	}
+	ix, err := openIndex()
+	if err != nil {
+		return err
+	}
+	defer ix.Close()
+	rt, err := openRouter()
+	if err != nil {
+		return err
+	}
+
+	reg := bizagent.NewRegistry()
+	bizagent.RegisterBuiltins(reg)
+	env := &bizagent.Env{Router: rt, Index: ix, DB: ix.DB, Vault: ix.Vault, MCP: cfg.MCP}
+	runner := bizagent.NewRunner(env, reg)
+
+	fmt.Printf("· working on: %s\n\n", goal)
+	answer, err := runner.Run(goal, func(s bizagent.Step) {
+		if s.Final != "" {
+			return
+		}
+		fmt.Printf("  → %s(%s)\n", s.Tool, jsonArgsShort(s.Args))
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n%s\n", strings.TrimSpace(answer))
+	return nil
+}
+
+func jsonArgsShort(args map[string]any) string {
+	var parts []string
+	for k, v := range args {
+		parts = append(parts, fmt.Sprintf("%s=%v", k, v))
+	}
+	return strings.Join(parts, ", ")
 }
