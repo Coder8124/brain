@@ -102,7 +102,7 @@ func main() {
 	case cmd == "memory":
 		err = memoryCmd(args)
 	case cmd == "bench" && len(args) >= 2 && args[0] == "memory":
-		err = runBench(args[1], flagInt(args, "--n", 50), flagInt(args, "--k", 5))
+		err = runBench(args[1], flagInt(args, "--n", 50), flagInt(args, "--k", 5), !hasFlag(args, "--vector"))
 	case cmd == "record":
 		err = runRecord(flagStr(args, "--name", ""), hasFlag(args, "--no-video"))
 	case cmd == "graph":

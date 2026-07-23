@@ -53,7 +53,7 @@ func (r BenchResult) Recall() float64 {
 
 // RunLongMemEval evaluates retrieval recall@k over up to `limit` instances of a
 // LongMemEval file. progress, if non-nil, is called per instance.
-func RunLongMemEval(p *provider.Provider, embedModel, path string, k, limit int, progress func(done, total int)) ([]BenchResult, error) {
+func RunLongMemEval(p *provider.Provider, embedModel, path string, k, limit int, hybrid bool, progress func(done, total int)) ([]BenchResult, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -91,7 +91,7 @@ func RunLongMemEval(p *provider.Provider, embedModel, path string, k, limit int,
 	overall := &BenchResult{Category: "OVERALL"}
 
 	for i, in := range instances {
-		hit, err := scoreInstance(p, embedModel, in, k)
+		hit, err := scoreInstance(p, embedModel, in, k, hybrid)
 		if err != nil {
 			return nil, err
 		}
@@ -125,7 +125,7 @@ func RunLongMemEval(p *provider.Provider, embedModel, path string, k, limit int,
 
 // scoreInstance loads one instance's sessions into a throwaway store and checks
 // whether the top-k recall for its question includes an evidence session.
-func scoreInstance(p *provider.Provider, embedModel string, in lmeInstance, k int) (bool, error) {
+func scoreInstance(p *provider.Provider, embedModel string, in lmeInstance, k int, hybrid bool) (bool, error) {
 	// Concatenate each session into one document, keyed by its session id — the
 	// answer session ids share the id's prefix, so we normalise both to compare.
 	texts := make([]string, 0, len(in.HaystackSessions))
@@ -158,22 +158,36 @@ func scoreInstance(p *provider.Provider, embedModel string, in lmeInstance, k in
 		return false, err
 	}
 
-	type scored struct {
-		id  string
-		sim float64
+	// Hybrid rank: vector similarity fused with BM25 lexical, so a session that
+	// shares the answer's exact terms is caught even when the embedding blurs it.
+	var top []string
+	if hybrid {
+		cands := make([]Candidate, len(sessVecs))
+		for i := range sessVecs {
+			cands[i] = Candidate{ID: ids[i], Text: texts[i], Vec: sessVecs[i]}
+		}
+		top = HybridRank(in.Question, qVec[0], cands, k)
+	} else {
+		type sc struct {
+			id  string
+			sim float64
+		}
+		r := make([]sc, len(sessVecs))
+		for i := range sessVecs {
+			r[i] = sc{ids[i], cosine(qVec[0], sessVecs[i])}
+		}
+		sort.Slice(r, func(a, b int) bool { return r[a].sim > r[b].sim })
+		for i := 0; i < k && i < len(r); i++ {
+			top = append(top, r[i].id)
+		}
 	}
-	ranked := make([]scored, len(sessVecs))
-	for i := range sessVecs {
-		ranked[i] = scored{ids[i], cosine(qVec[0], sessVecs[i])}
-	}
-	sort.Slice(ranked, func(i, j int) bool { return ranked[i].sim > ranked[j].sim })
 
 	evidence := map[string]bool{}
 	for _, e := range in.AnswerSessionIDs {
 		evidence[normalizeSessionID(e)] = true
 	}
-	for i := 0; i < k && i < len(ranked); i++ {
-		if evidence[normalizeSessionID(ranked[i].id)] {
+	for _, id := range top {
+		if evidence[normalizeSessionID(id)] {
 			return true, nil
 		}
 	}

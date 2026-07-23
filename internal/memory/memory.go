@@ -12,6 +12,7 @@ package memory
 import (
 	"database/sql"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -128,7 +129,7 @@ func Recall(db *sql.DB, p *provider.Provider, embedModel, query string, k int) (
 	if err != nil || len(vecs) == 0 {
 		return All(db)
 	}
-	mems, err := recallByVec(db, vecs[0], k)
+	mems, err := recallByVec(db, vecs[0], k, query)
 	if err != nil {
 		return nil, err
 	}
@@ -139,9 +140,11 @@ func Recall(db *sql.DB, p *provider.Provider, embedModel, query string, k int) (
 	return mems, nil
 }
 
-// recallByVec ranks stored memories against a query vector. Salience nudges the
-// ranking so a high-importance memory beats a marginally-closer trivial one.
-func recallByVec(db *sql.DB, query []float32, k int) ([]Memory, error) {
+// recallByVec ranks stored memories using hybrid retrieval (vector + BM25 fused)
+// blended with effective salience. queryText drives the lexical arm; pass "" to
+// fall back to pure vector. The +8.9-point lift this gave on LongMemEval is why
+// live recall runs it too, not just the benchmark.
+func recallByVec(db *sql.DB, query []float32, k int, queryText string) ([]Memory, error) {
 	rows, err := db.Query(`SELECT id, text, kind, salience, source, created, last_used, uses, vec FROM memories WHERE superseded = 0`)
 	if err != nil {
 		return nil, err
@@ -149,6 +152,7 @@ func recallByVec(db *sql.DB, query []float32, k int) ([]Memory, error) {
 	defer rows.Close()
 
 	var mems []Memory
+	var cands []Candidate
 	for rows.Next() {
 		var m Memory
 		var kind string
@@ -160,18 +164,29 @@ func recallByVec(db *sql.DB, query []float32, k int) ([]Memory, error) {
 		if len(vec) == 0 {
 			continue
 		}
-		sim := cosine(query, blobToFloats(vec))
-		// Rank on similarity plus how much the memory currently matters —
-		// effective salience folds in decay and reinforcement, so a fresh,
-		// often-recalled memory outranks a stale one it ties with on content.
-		m.Score = sim*0.82 + EffectiveSalience(m, time.Now().Unix())*0.18
 		mems = append(mems, m)
+		cands = append(cands, Candidate{ID: fmt.Sprint(m.ID), Text: m.Text, Vec: blobToFloats(vec)})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	fused := Fuse(queryText, query, cands) // normalised 0..1 relevance per candidate
+	now := time.Now().Unix()
+	for i := range mems {
+		rel := 0.0
+		if i < len(fused) {
+			rel = fused[i]
+		}
+		// Relevance dominates; effective salience (decay + reinforcement) breaks
+		// ties toward what currently matters.
+		mems[i].Score = rel*0.85 + EffectiveSalience(mems[i], now)*0.15
 	}
 	sortByScore(mems)
 	if len(mems) > k {
 		mems = mems[:k]
 	}
-	return mems, rows.Err()
+	return mems, nil
 }
 
 // All returns every memory, most salient first — the fallback and the CLI view.

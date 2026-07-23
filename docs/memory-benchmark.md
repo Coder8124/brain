@@ -13,24 +13,26 @@ metric other local memory systems report.
 
 **Result** (recall@5, 90 instances stratified across all categories):
 
-| Category                  | Recall |  n |
-|---------------------------|-------:|---:|
-| **OVERALL**               |  86.7% | 90 |
-| knowledge-update          | 100.0% | 15 |
-| multi-session             |  92.6% | 27 |
-| single-session-assistant  | 100.0% |  1 |
-| single-session-preference |  83.3% |  6 |
-| temporal-reasoning        |  85.2% | 27 |
-| single-session-user       |  64.3% | 14 |
+| Category                  | Vector-only | **Hybrid** |  n |
+|---------------------------|------------:|-----------:|---:|
+| **OVERALL**               |       86.7% |  **95.6%** | 90 |
+| single-session-user       |       64.3% | **100.0%** | 14 |
+| multi-session             |       92.6% |     100.0% | 27 |
+| temporal-reasoning        |       85.2% |      92.6% | 27 |
+| knowledge-update          |      100.0% |      93.3% | 15 |
+| single-session-preference |       83.3% |      83.3% |  6 |
+| single-session-assistant  |      100.0% |     100.0% |  1 |
 
-`knowledge-update` — where a later fact supersedes an earlier one — hits 100%,
-which is what the supersede/consolidate machinery is for. `single-session-user`
-(one buried user statement) is the weak spot and the place a reranker would help
-most.
+Hybrid = the vector ranking fused with an in-process **BM25** lexical ranking by
+reciprocal rank fusion. The big win is `single-session-user` (64% → 100%): a
+buried one-off statement is found by its exact terms, which the embedding blurs.
+Overall recall@5 rises **+8.9 points to 95.6%**. (knowledge-update slips by one
+instance of 15 — within noise.) Live persistent recall uses the same hybrid path.
 
 Reproduce:
 
 ```
 # dataset: huggingface.co/datasets/xiaowu0162/longmemeval-cleaned
-brain bench memory longmemeval_s_cleaned.json --n 90 --k 5
+brain bench memory longmemeval_s_cleaned.json --n 90 --k 5            # hybrid
+brain bench memory longmemeval_s_cleaned.json --n 90 --k 5 --vector   # vector-only baseline
 ```

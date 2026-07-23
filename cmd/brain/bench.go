@@ -8,7 +8,7 @@ import (
 )
 
 // runBench evaluates the memory's retrieval recall against a LongMemEval file.
-func runBench(path string, n, k int) error {
+func runBench(path string, n, k int, hybrid bool) error {
 	rt, err := openRouter()
 	if err != nil {
 		return err
@@ -16,7 +16,12 @@ func runBench(path string, n, k int) error {
 	embed, _ := rt.Model(router.T0)
 
 	fmt.Printf("· LongMemEval retrieval recall@%d over %d instances of %s\n", k, n, path)
-	results, err := memory.RunLongMemEval(rt.Local(), embed, path, k, n, func(done, total int) {
+	mode := "hybrid (vector+BM25)"
+	if !hybrid {
+		mode = "vector-only"
+	}
+	fmt.Printf("  mode: %s\n", mode)
+	results, err := memory.RunLongMemEval(rt.Local(), embed, path, k, n, hybrid, func(done, total int) {
 		fmt.Printf("\r  %d/%d …", done, total)
 	})
 	if err != nil {
