@@ -59,3 +59,25 @@ is **semantic dedup at write time** — a new memory within `DedupThreshold`
 takes re-learn growth to zero while keeping distinct facts.
 
 Reproduce: `brain bench pipeline`
+
+
+## Full run — all 500 questions (recall curve)
+
+The definitive result: every non-abstention LongMemEval-S question (500),
+hybrid retrieval, recall at each depth in one pass.
+
+| Category                  |    @1 |    @3 |    @5 |   @10 |   n |
+|---------------------------|------:|------:|------:|------:|----:|
+| **OVERALL**               | 83.8% | 93.6% | **96.0%** | **99.2%** | 500 |
+| single-session-assistant  | 98.2% |100.0% |100.0% |100.0% |  56 |
+| knowledge-update          | 89.7% | 97.4% | 97.4% |100.0% |  78 |
+| multi-session             | 88.7% | 94.0% | 96.2% | 99.2% | 133 |
+| temporal-reasoning        | 81.2% | 91.7% | 95.5% | 98.5% | 133 |
+| single-session-user       | 71.4% | 90.0% | 94.3% | 98.6% |  70 |
+| single-session-preference | 60.0% | 86.7% | 90.0% |100.0% |  30 |
+
+**96.0% recall@5 and 99.2% recall@10, entirely local** — competitive with
+published cloud memory systems, with no reranker beyond the BM25 fusion and no
+API calls. The evidence is almost always retrievable; `single-session-preference`
+is the hardest at shallow depth (a lone stated preference among distractors) but
+reaches 100% by @10.
