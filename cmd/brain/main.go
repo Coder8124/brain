@@ -102,7 +102,7 @@ func main() {
 	case cmd == "memory":
 		err = memoryCmd(args)
 	case cmd == "bench" && len(args) >= 2 && args[0] == "memory":
-		err = runBench(args[1], flagInt(args, "--n", 50), flagInt(args, "--k", 5), !hasFlag(args, "--vector"))
+		err = runBench(args[1], flagInt(args, "--n", 100), !hasFlag(args, "--vector"))
 	case cmd == "bench" && len(args) >= 1 && args[0] == "pipeline":
 		err = runPipelineBench()
 	case cmd == "record":

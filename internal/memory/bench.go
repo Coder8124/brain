@@ -37,23 +37,31 @@ type lmeTurn struct {
 	Content string `json:"content"`
 }
 
-// BenchResult is the outcome for one category (or overall).
+// Ks are the recall@k thresholds reported in one pass.
+var Ks = []int{1, 3, 5, 10}
+
+// BenchResult is the outcome for one category (or overall): hits at each k.
 type BenchResult struct {
 	Category string
 	N        int
-	Hits     int
+	HitsAt   map[int]int // k -> number of questions whose evidence was in the top k
 }
 
-func (r BenchResult) Recall() float64 {
+func newResult(cat string) *BenchResult {
+	return &BenchResult{Category: cat, HitsAt: map[int]int{}}
+}
+
+// RecallAt returns recall@k for this result.
+func (r BenchResult) RecallAt(k int) float64 {
 	if r.N == 0 {
 		return 0
 	}
-	return float64(r.Hits) / float64(r.N)
+	return float64(r.HitsAt[k]) / float64(r.N)
 }
 
-// RunLongMemEval evaluates retrieval recall@k over up to `limit` instances of a
-// LongMemEval file. progress, if non-nil, is called per instance.
-func RunLongMemEval(p *provider.Provider, embedModel, path string, k, limit int, hybrid bool, progress func(done, total int)) ([]BenchResult, error) {
+// RunLongMemEval evaluates retrieval recall at several k thresholds (Ks) over up
+// to `limit` instances of a LongMemEval file, in one embedding pass.
+func RunLongMemEval(p *provider.Provider, embedModel, path string, limit int, hybrid bool, progress func(done, total int)) ([]BenchResult, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -88,23 +96,33 @@ func RunLongMemEval(p *provider.Provider, embedModel, path string, k, limit int,
 	}
 
 	byCat := map[string]*BenchResult{}
-	overall := &BenchResult{Category: "OVERALL"}
+	overall := newResult("OVERALL")
+
+	maxK := 0
+	for _, k := range Ks {
+		if k > maxK {
+			maxK = k
+		}
+	}
 
 	for i, in := range instances {
-		hit, err := scoreInstance(p, embedModel, in, k, hybrid)
+		rank, err := evidenceRank(p, embedModel, in, hybrid, maxK)
 		if err != nil {
 			return nil, err
 		}
 		cat := byCat[in.QuestionType]
 		if cat == nil {
-			cat = &BenchResult{Category: in.QuestionType}
+			cat = newResult(in.QuestionType)
 			byCat[in.QuestionType] = cat
 		}
 		cat.N++
 		overall.N++
-		if hit {
-			cat.Hits++
-			overall.Hits++
+		// A hit at k means the best evidence rank is within the top k.
+		for _, k := range Ks {
+			if rank >= 0 && rank < k {
+				cat.HitsAt[k]++
+				overall.HitsAt[k]++
+			}
 		}
 		if progress != nil {
 			progress(i+1, len(instances))
@@ -123,11 +141,9 @@ func RunLongMemEval(p *provider.Provider, embedModel, path string, k, limit int,
 	return out, nil
 }
 
-// scoreInstance loads one instance's sessions into a throwaway store and checks
-// whether the top-k recall for its question includes an evidence session.
-func scoreInstance(p *provider.Provider, embedModel string, in lmeInstance, k int, hybrid bool) (bool, error) {
-	// Concatenate each session into one document, keyed by its session id — the
-	// answer session ids share the id's prefix, so we normalise both to compare.
+// evidenceRank returns the best (lowest) rank at which any evidence session
+// appears in the retrieval ordering, or -1 if none within the top `depth`.
+func evidenceRank(p *provider.Provider, embedModel string, in lmeInstance, hybrid bool, depth int) (int, error) {
 	texts := make([]string, 0, len(in.HaystackSessions))
 	ids := make([]string, 0, len(in.HaystackSessions))
 	for si, sess := range in.HaystackSessions {
@@ -146,27 +162,22 @@ func scoreInstance(p *provider.Provider, embedModel string, in lmeInstance, k in
 		ids = append(ids, id)
 	}
 
-	// Embed all sessions in one batch, then the query, and rank by cosine — the
-	// same retrieval our memory recall uses, run over these sessions directly so
-	// the benchmark measures the backend, not the LLM extraction.
 	sessVecs, err := p.Embed(embedModel, truncateAll(texts, 2000))
 	if err != nil {
-		return false, err
+		return -1, err
 	}
 	qVec, err := p.Embed(embedModel, []string{in.Question})
 	if err != nil || len(qVec) == 0 {
-		return false, err
+		return -1, err
 	}
 
-	// Hybrid rank: vector similarity fused with BM25 lexical, so a session that
-	// shares the answer's exact terms is caught even when the embedding blurs it.
-	var top []string
+	var ordered []string
 	if hybrid {
 		cands := make([]Candidate, len(sessVecs))
 		for i := range sessVecs {
 			cands[i] = Candidate{ID: ids[i], Text: texts[i], Vec: sessVecs[i]}
 		}
-		top = HybridRank(in.Question, qVec[0], cands, k)
+		ordered = HybridRank(in.Question, qVec[0], cands, depth)
 	} else {
 		type sc struct {
 			id  string
@@ -177,8 +188,8 @@ func scoreInstance(p *provider.Provider, embedModel string, in lmeInstance, k in
 			r[i] = sc{ids[i], cosine(qVec[0], sessVecs[i])}
 		}
 		sort.Slice(r, func(a, b int) bool { return r[a].sim > r[b].sim })
-		for i := 0; i < k && i < len(r); i++ {
-			top = append(top, r[i].id)
+		for i := 0; i < depth && i < len(r); i++ {
+			ordered = append(ordered, r[i].id)
 		}
 	}
 
@@ -186,12 +197,12 @@ func scoreInstance(p *provider.Provider, embedModel string, in lmeInstance, k in
 	for _, e := range in.AnswerSessionIDs {
 		evidence[normalizeSessionID(e)] = true
 	}
-	for _, id := range top {
+	for rank, id := range ordered {
 		if evidence[normalizeSessionID(id)] {
-			return true, nil
+			return rank, nil
 		}
 	}
-	return false, nil
+	return -1, nil
 }
 
 // normalizeSessionID reduces the two id conventions LongMemEval uses (a plain

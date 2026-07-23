@@ -15,11 +15,11 @@ func TestNormalizeSessionIDMatchesConventions(t *testing.T) {
 }
 
 func TestBenchResultRecall(t *testing.T) {
-	r := BenchResult{N: 4, Hits: 3}
-	if r.Recall() != 0.75 {
-		t.Errorf("recall = %v, want 0.75", r.Recall())
+	r := BenchResult{N: 4, HitsAt: map[int]int{5: 3}}
+	if r.RecallAt(5) != 0.75 {
+		t.Errorf("recall@5 = %v, want 0.75", r.RecallAt(5))
 	}
-	if (BenchResult{}).Recall() != 0 {
+	if (BenchResult{}).RecallAt(5) != 0 {
 		t.Error("empty result should be 0, not NaN")
 	}
 }

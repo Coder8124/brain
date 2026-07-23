@@ -7,21 +7,21 @@ import (
 	"github.com/pragun/brain/internal/router"
 )
 
-// runBench evaluates the memory's retrieval recall against a LongMemEval file.
-func runBench(path string, n, k int, hybrid bool) error {
+// runBench evaluates the memory's retrieval recall at several k against a
+// LongMemEval file, in one embedding pass.
+func runBench(path string, n int, hybrid bool) error {
 	rt, err := openRouter()
 	if err != nil {
 		return err
 	}
 	embed, _ := rt.Model(router.T0)
 
-	fmt.Printf("· LongMemEval retrieval recall@%d over %d instances of %s\n", k, n, path)
 	mode := "hybrid (vector+BM25)"
 	if !hybrid {
 		mode = "vector-only"
 	}
-	fmt.Printf("  mode: %s\n", mode)
-	results, err := memory.RunLongMemEval(rt.Local(), embed, path, k, n, hybrid, func(done, total int) {
+	fmt.Printf("· LongMemEval retrieval recall over %d instances · %s\n", n, mode)
+	results, err := memory.RunLongMemEval(rt.Local(), embed, path, n, hybrid, func(done, total int) {
 		fmt.Printf("\r  %d/%d …", done, total)
 	})
 	if err != nil {
@@ -29,18 +29,18 @@ func runBench(path string, n, k int, hybrid bool) error {
 	}
 	fmt.Printf("\r%40s\r", "")
 
-	fmt.Printf("\n%-26s %6s  %s\n", "category", "recall", "n")
+	// header
+	fmt.Printf("\n%-26s", "category")
+	for _, k := range memory.Ks {
+		fmt.Printf(" %6s", fmt.Sprintf("@%d", k))
+	}
+	fmt.Printf("   n\n")
 	for _, r := range results {
-		bar := ""
-		filled := int(r.Recall() * 20)
-		for i := 0; i < 20; i++ {
-			if i < filled {
-				bar += "█"
-			} else {
-				bar += "·"
-			}
+		fmt.Printf("%-26s", r.Category)
+		for _, k := range memory.Ks {
+			fmt.Printf(" %5.1f%%", r.RecallAt(k)*100)
 		}
-		fmt.Printf("%-26s %5.1f%%  %-4d %s\n", r.Category, r.Recall()*100, r.N, bar)
+		fmt.Printf("   %d\n", r.N)
 	}
 	return nil
 }
