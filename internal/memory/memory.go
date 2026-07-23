@@ -96,10 +96,23 @@ func Store(db *sql.DB, p *provider.Provider, embedModel string, m *Memory) (bool
 	}
 
 	var vec []byte
+	var qvec []float32
 	if p != nil {
 		vecs, err := p.Embed(embedModel, []string{m.Text})
 		if err == nil && len(vecs) == 1 {
-			vec = floatsToBlob(vecs[0])
+			qvec = vecs[0]
+			vec = floatsToBlob(qvec)
+		}
+	}
+
+	// Semantic dedup: the model paraphrases the same fact differently every time
+	// it re-extracts it, so exact-text dedup lets re-learning bloat the store.
+	// If an existing memory is near-identical in meaning, reinforce it instead of
+	// adding a twin — this is what keeps the store from growing on repetition.
+	if qvec != nil {
+		if id, ok := nearestMemory(db, qvec, DedupThreshold); ok {
+			db.Exec("UPDATE memories SET salience = MIN(1.0, salience + 0.05), uses = uses + 1 WHERE id = ?", id)
+			return false, nil
 		}
 	}
 
@@ -115,6 +128,35 @@ func Store(db *sql.DB, p *provider.Provider, embedModel string, m *Memory) (bool
 		m.ID, _ = res.LastInsertId()
 	}
 	return n > 0, nil
+}
+
+// DedupThreshold is how close a new memory must be to an existing one to be
+// treated as the same fact. High, so genuinely distinct facts about the same
+// subject are kept; only near-restatements collapse.
+const DedupThreshold = 0.87
+
+// nearestMemory returns the id of the most-similar active memory if it clears
+// the threshold — the write-time guard against near-duplicate accumulation.
+func nearestMemory(db *sql.DB, query []float32, threshold float64) (int64, bool) {
+	rows, err := db.Query(`SELECT id, vec FROM memories WHERE superseded = 0 AND vec IS NOT NULL`)
+	if err != nil {
+		return 0, false
+	}
+	defer rows.Close()
+	var bestID int64
+	best := threshold
+	for rows.Next() {
+		var id int64
+		var vec []byte
+		if rows.Scan(&id, &vec) != nil || len(vec) == 0 {
+			continue
+		}
+		if sim := cosine(query, blobToFloats(vec)); sim >= best {
+			best = sim
+			bestID = id
+		}
+	}
+	return bestID, bestID != 0
 }
 
 // Recall returns the memories most relevant to a query, by embedding similarity.

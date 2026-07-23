@@ -36,3 +36,26 @@ Reproduce:
 brain bench memory longmemeval_s_cleaned.json --n 90 --k 5            # hybrid
 brain bench memory longmemeval_s_cleaned.json --n 90 --k 5 --vector   # vector-only baseline
 ```
+
+## Extract → recall pipeline
+
+Beyond retrieval, we test the whole loop the assistant runs live: read a
+conversation, extract what is worth remembering (a model call), store it, and
+recall it later from a natural question. `brain bench pipeline` seeds a fresh
+test vault with sample conversations spanning preferences, people, context and
+plain facts, then measures correctness and efficiency.
+
+| Metric | Result |
+|---|---|
+| extract→recall accuracy | **100%** (6/6 facts survived the round trip) |
+| dedup growth on re-learn | **0** (re-learning the same conversations adds nothing) |
+| extraction | ~2.7s per conversation (gemma3:4b, T1) |
+| recall | ~30ms per query (hybrid over the store) |
+
+The pipeline test earned its keep: the first run exposed that exact-text dedup
+let re-learning bloat the store (the model paraphrases each extraction). The fix
+is **semantic dedup at write time** — a new memory within `DedupThreshold`
+(0.87 cosine) of an existing one reinforces it instead of adding a twin — which
+takes re-learn growth to zero while keeping distinct facts.
+
+Reproduce: `brain bench pipeline`

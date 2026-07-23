@@ -201,3 +201,28 @@ func TestBM25IgnoresStopwordsAndEmptyQuery(t *testing.T) {
 		t.Error("the doc containing the term should score higher")
 	}
 }
+
+func TestNearestMemoryDetectsNearDuplicate(t *testing.T) {
+	db := testDB(t)
+	storeVec(t, db, "prefers short emails", Preference, 0.5, []float32{1, 0, 0})
+	storeVec(t, db, "launching in Q4", Context, 0.5, []float32{0, 1, 0})
+
+	// A near-identical vector should find the first memory as a duplicate.
+	if _, ok := nearestMemory(db, []float32{0.99, 0.02, 0}, 0.87); !ok {
+		t.Error("a near-identical vector should be flagged as a duplicate")
+	}
+	// An orthogonal vector should not match anything.
+	if _, ok := nearestMemory(db, []float32{0, 0, 1}, 0.87); ok {
+		t.Error("an unrelated vector must not be treated as a duplicate")
+	}
+}
+
+func TestPipelineReportAccuracy(t *testing.T) {
+	r := PipelineReport{Cases: 6, RecallHits: 6}
+	if r.Accuracy() != 1.0 {
+		t.Errorf("accuracy = %v, want 1.0", r.Accuracy())
+	}
+	if (PipelineReport{}).Accuracy() != 0 {
+		t.Error("empty report should be 0, not NaN")
+	}
+}
