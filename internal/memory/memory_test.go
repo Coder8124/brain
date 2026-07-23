@@ -42,7 +42,7 @@ func TestRecallRanksBySimilarity(t *testing.T) {
 	storeVec(t, db, "Sarah is the CFO", Person, 0.5, []float32{0, 0, 1})
 
 	// A query pointing along the "meetings" axis should surface that memory.
-	got, err := recallByVec(db, []float32{0.9, 0.1, 0}, 3)
+	got, err := recallByVec(db, []float32{0.9, 0.1, 0}, 3, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestSalienceBreaksNearTies(t *testing.T) {
 	// Two memories almost equally close; the more salient should win.
 	storeVec(t, db, "trivial", Fact, 0.1, []float32{1, 0.02, 0})
 	storeVec(t, db, "important", Fact, 0.95, []float32{1, 0.0, 0})
-	got, _ := recallByVec(db, []float32{1, 0, 0}, 2)
+	got, _ := recallByVec(db, []float32{1, 0, 0}, 2, "")
 	if got[0].Text != "important" {
 		t.Errorf("salience should break a near tie toward the important memory, got %q", got[0].Text)
 	}
@@ -150,7 +150,7 @@ func TestSupersededMemoriesAreNotRecalled(t *testing.T) {
 	// Supersede the NYC memory (as Consolidate would on a knowledge update).
 	db.Exec("UPDATE memories SET superseded = 1 WHERE text = 'lives in NYC'")
 
-	got, _ := recallByVec(db, []float32{1, 0, 0}, 5)
+	got, _ := recallByVec(db, []float32{1, 0, 0}, 5, "")
 	for _, m := range got {
 		if m.Text == "lives in NYC" {
 			t.Error("a superseded memory must not be recalled — the current fact should win")
@@ -173,5 +173,56 @@ func TestSurfaceReturnsTopByKind(t *testing.T) {
 	}
 	if prefs[0].Text != "prefers short emails" {
 		t.Errorf("most salient should lead, got %q", prefs[0].Text)
+	}
+}
+
+func TestHybridRescuesExactToken(t *testing.T) {
+	// Two candidates: one is embedding-close to the query but lacks the key
+	// token; the other contains the exact identifier. Hybrid must surface the
+	// exact-token doc that pure vector would rank lower.
+	cands := []Candidate{
+		{ID: "a", Text: "we talked about scheduling and calendars in general", Vec: []float32{1, 0.9, 0}},
+		{ID: "b", Text: "my confirmation code is ZX9QW7 for the flight", Vec: []float32{1, 0.2, 0}},
+	}
+	q := "what was my confirmation code ZX9QW7"
+	qv := []float32{1, 0.85, 0} // embedding-closer to A
+	top := HybridRank(q, qv, cands, 1)
+	if len(top) != 1 || top[0] != "b" {
+		t.Errorf("hybrid should surface the exact-token doc b, got %v", top)
+	}
+}
+
+func TestBM25IgnoresStopwordsAndEmptyQuery(t *testing.T) {
+	if s := bm25("the and of", []string{"the cat sat", "dog ran"}); s[0] != 0 || s[1] != 0 {
+		t.Errorf("an all-stopword query should score nothing, got %v", s)
+	}
+	scores := bm25("eigenvalue", []string{"eigenvalue decomposition", "unrelated text"})
+	if scores[0] <= scores[1] {
+		t.Error("the doc containing the term should score higher")
+	}
+}
+
+func TestNearestMemoryDetectsNearDuplicate(t *testing.T) {
+	db := testDB(t)
+	storeVec(t, db, "prefers short emails", Preference, 0.5, []float32{1, 0, 0})
+	storeVec(t, db, "launching in Q4", Context, 0.5, []float32{0, 1, 0})
+
+	// A near-identical vector should find the first memory as a duplicate.
+	if _, ok := nearestMemory(db, []float32{0.99, 0.02, 0}, 0.87); !ok {
+		t.Error("a near-identical vector should be flagged as a duplicate")
+	}
+	// An orthogonal vector should not match anything.
+	if _, ok := nearestMemory(db, []float32{0, 0, 1}, 0.87); ok {
+		t.Error("an unrelated vector must not be treated as a duplicate")
+	}
+}
+
+func TestPipelineReportAccuracy(t *testing.T) {
+	r := PipelineReport{Cases: 6, RecallHits: 6}
+	if r.Accuracy() != 1.0 {
+		t.Errorf("accuracy = %v, want 1.0", r.Accuracy())
+	}
+	if (PipelineReport{}).Accuracy() != 0 {
+		t.Error("empty report should be 0, not NaN")
 	}
 }
