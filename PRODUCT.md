@@ -19,12 +19,13 @@ your machine, nothing uploaded unless you say so.
 4. [The three modes](#the-three-modes)
 5. [The memory system](#the-memory-system)
 6. [The secretary's weekly review](#the-secretarys-weekly-review)
-7. [Architecture](#architecture)
-8. [Model tiers](#model-tiers)
-9. [The command surface](#the-command-surface)
-10. [Editions](#editions)
-11. [Benchmarks](#benchmarks)
-12. [Status & roadmap](#status--roadmap)
+7. [Voice — talk to it, hear it back](#voice)
+8. [Architecture](#architecture)
+9. [Model tiers](#model-tiers)
+10. [The command surface](#the-command-surface)
+11. [Editions](#editions)
+12. [Benchmarks](#benchmarks)
+13. [Status & roadmap](#status--roadmap)
 
 ---
 
@@ -238,6 +239,40 @@ data (instant, offline, every number traceable):
 
 ---
 
+<a id="voice"></a>
+
+## Voice — talk to it, hear it back
+
+The assistant has ears and a mouth, entirely on-device. Both engines are
+self-contained native binaries the product **bundles** alongside their model
+files and runs as subprocesses — no cgo in the Go core, no cloud, no per-word
+API. Your voice never leaves the machine.
+
+- **Speech-to-text** — [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+  transcribes a mic turn captured via `ffmpeg` (16 kHz mono). Swap the GGML model
+  for the speed/accuracy you want; Moonshine or another CLI can be dropped in via
+  an env override.
+- **Text-to-speech** — [Piper](https://github.com/rhasspy/piper), a small, fast,
+  fully-local neural voice. If Piper isn't bundled yet, TTS falls back to the OS
+  voice (macOS `say`) so the assistant can always talk.
+
+Each binary and model resolves in order: an **environment override**, then the
+**bundled resources directory** shipped with the app (in a packaged macOS app,
+`Contents/Resources/voice/…`), then a plain **PATH** lookup for developers who
+installed the tools themselves. `scripts/fetch-voice.sh` pulls the binaries and
+models into `resources/voice/` at build time; `brain doctor` shows exactly what
+resolved.
+
+**Commands:**
+
+- `brain say <text>` — speak text aloud
+- `brain listen [--seconds N]` — transcribe a mic turn to text
+- `brain voice [--seconds N]` — a hands-on-keyboard voice Q&A loop over the
+  vault: press Enter to talk, hear the answer, repeat
+
+A streaming speaker (`SpeakStream`) also lets the app speak a model reply
+sentence by sentence as it generates, so speech starts before the text finishes.
+
 ## Architecture
 
 **Stack:** Go + Wails v2 (a frameless, aesthetically-tuned menubar widget app),
@@ -273,6 +308,7 @@ disposable.
 | `sheet` | reads spreadsheets (xlsx, csv) into a common table |
 | `bizagent` | the business agent harness |
 | `record` | captures a study session and turns it into notes |
+| `voice` | on-device speech-to-text (whisper.cpp) and text-to-speech (Piper) |
 | `mcpserver` | exposes brain's persistent memory as an MCP server |
 
 **Trust loop:** every inference is a **proposal** with cited evidence; nothing
@@ -311,6 +347,7 @@ at startup rather than surfacing as a pipeline error later.
 brain ask <q> | search <q> | timeline        query what it knows
 brain brief                                   the proactive daily digest
 brain weekly                                  the Sunday executive review
+brain voice | listen | say <text>             talk to it, hear it back (local STT/TTS)
 brain memory [add|forget|log|history|graph]   persistent memory + timeline + graph
 brain projects | project <name>               auto-detected projects and dossiers
 brain loop [add|done|drop]                     open commitments
@@ -351,8 +388,9 @@ benchmark for chat assistants:
 with decay, reinforcement, consolidation and supersession; **confidence ratings**;
 the **memory timeline** (git history for memory); the **memory relationship
 graph**; **auto-detected projects** with scoped memory; Secretary / Tutor /
-Business modes; the **weekly executive review**; the confirmation-gate trust loop;
-the benchmark harness; and the **MCP memory server** — across all three editions.
+Business modes; the **weekly executive review**; **on-device voice** (STT + TTS,
+bundled); the confirmation-gate trust loop; the benchmark harness; and the **MCP
+memory server** — across all three editions.
 
 **Next:**
 
