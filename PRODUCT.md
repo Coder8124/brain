@@ -273,6 +273,23 @@ resolved.
 A streaming speaker (`SpeakStream`) also lets the app speak a model reply
 sentence by sentence as it generates, so speech starts before the text finishes.
 
+## Appearance
+
+The widget ships with a palette of themes, chosen from a picker in the header and
+remembered across launches. The whole UI is drawn from CSS variables, so a theme
+is a swap of one variable block and nothing else:
+
+- **Dark** (default), **Light**
+- **Paper** — warm cream and sepia ink, in a book-like serif
+- **Digital** — terminal green on near-black, monospace throughout
+- **Blue** — deep ocean with a cyan accent
+- **Red** — dark crimson with a coral accent
+- **Auto** — follows the time of day, light through the day and dark at night,
+  re-checked on its own so it flips at dawn and dusk without a reload
+
+Safety signals (recording, an imminent meeting, a destructive action) stay red in
+every theme.
+
 ## Architecture
 
 **Stack:** Go + Wails v2 (a frameless, aesthetically-tuned menubar widget app),
@@ -389,8 +406,9 @@ with decay, reinforcement, consolidation and supersession; **confidence ratings*
 the **memory timeline** (git history for memory); the **memory relationship
 graph**; **auto-detected projects** with scoped memory; Secretary / Tutor /
 Business modes; the **weekly executive review**; **on-device voice** (STT + TTS,
-bundled); the confirmation-gate trust loop; the benchmark harness; and the **MCP
-memory server** — across all three editions.
+bundled); a palette of **themes** (light/dark/paper/digital/blue/red + auto); the
+confirmation-gate trust loop; the benchmark harness; and the **MCP memory
+server** — across all three editions.
 
 **Next:**
 
