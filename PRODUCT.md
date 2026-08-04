@@ -18,14 +18,15 @@ your machine, nothing uploaded unless you say so.
 3. [The two faces of the memory](#the-two-faces-of-the-memory)
 4. [The three modes](#the-three-modes)
 5. [The memory system](#the-memory-system)
-6. [The secretary's weekly review](#the-secretarys-weekly-review)
-7. [Voice — talk to it, hear it back](#voice)
-8. [Architecture](#architecture)
-9. [Model tiers](#model-tiers)
-10. [The command surface](#the-command-surface)
-11. [Editions](#editions)
-12. [Benchmarks](#benchmarks)
-13. [Status & roadmap](#status--roadmap)
+6. [Dreaming — the nightly consolidation pass](#dreaming--the-nightly-consolidation-pass)
+7. [The secretary's weekly review](#the-secretarys-weekly-review)
+8. [Voice — talk to it, hear it back](#voice)
+9. [Architecture](#architecture)
+10. [Model tiers](#model-tiers)
+11. [The command surface](#the-command-surface)
+12. [Editions](#editions)
+13. [Benchmarks](#benchmarks)
+14. [Status & roadmap](#status--roadmap)
 
 ---
 
@@ -59,6 +60,13 @@ your machine, nothing uploaded unless you say so.
 5. **Compute, then narrate.** For anything with numbers — finances, forecasts,
    diagnostics, the weekly review — the answer is computed in code and the model
    only phrases it. The model never does the arithmetic.
+6. **The memory is yours, and portable.** Your "personal context" is not locked
+   in a vendor's black box — it is markdown you can read, correct, and carry. An
+   on-device assistant like Apple Intelligence keeps its sense of you opaque and
+   walled to its own apps; brain's memory is a file you own and can lend to any AI
+   tool over MCP. It won't match a platform owner on raw signal or ubiquity, and
+   doesn't try to — it wins on the one axis a walled assistant structurally can't:
+   a memory you hold, inspect, and take everywhere.
 
 ---
 
@@ -69,14 +77,18 @@ brain treats its memory as a product with two directions:
 ### 1. Memory served outward — the MCP server *(shipped)*
 
 `brain mcp serve` exposes your local memory over the **Model Context Protocol**,
-the same protocol Claude Desktop, Claude Code, and Cursor speak. Any of those
-hosts can plug in and gain one private memory that follows you across every tool
-and session. The same store the brain app reads is the one an external agent
-writes to — tell one tool something, and the others know it. Nothing is uploaded.
+the same protocol Claude Desktop, Claude Code, and Cursor speak — and that any
+application can build on. A host doesn't just plug in beside a chat; it can sit its
+own product *on top of* one private memory that follows you across every tool and
+session. The same store the brain app reads is the one an external agent reads and
+writes — tell one tool something, and the others know it. Nothing is uploaded.
 
-Four tools: `remember`, `recall`, `list_memories`, `forget`. It speaks
-newline-delimited JSON-RPC 2.0 over stdio; tool failures come back as `isError`
-results (not protocol errors) so the host's model can react.
+Seven tools, enough to use brain as a memory backend: write (`remember`), read
+(`recall`, `list_memories`), revise (`forget`), ask what changed (`memory_diff`),
+pull a ready-made **context pack** for a file or project (`context_pack`), and
+enumerate detected projects (`list_projects`). It speaks newline-delimited
+JSON-RPC 2.0 over stdio; tool failures come back as `isError` results (not
+protocol errors) so the host's model can react.
 
 ### 2. Memory turned inward — the mirror *(planned)*
 
@@ -87,6 +99,16 @@ memory can offer. Design in progress.
 ---
 
 ## The three modes
+
+Memory is the platform; the modes are **applications on top of it**. Capture, the
+two-tier memory, hybrid recall, dreaming, the graph, and the trust loop are the
+operating system — Secretary, Tutor, Business (and the inward Mirror) are apps that
+read the one shared memory and add domain surfaces on top. No app keeps its own
+private notion of you: it may hold domain data (Tutor's flashcards, Business's
+spreadsheets), but every fact it learns about *you* flows back to the single
+memory. That rule is what keeps the core thin and the product focused — a
+capability belongs in the platform if it makes memory better, and in an app if
+it's domain-specific.
 
 The app ships in editions that bundle different modes. The **only** difference
 between editions is which modes are offered — the entire engine is shared.
@@ -187,6 +209,38 @@ forgotten** — with a text snapshot, so the history stays legible even after a
 memory is deleted. You can always answer "when did it start believing this, and
 why does it believe it now?"
 
+### Memory diff — what changed
+
+`brain memory diff [subject] [--since] [--until] [--days N]`. Where the timeline
+lists events, the diff answers the question people actually ask — *what changed?* —
+over a window, optionally about one subject ("what changed about Sarah?"). It reads
+the same append-only log and sorts the changes into what was newly **learned**,
+what was **dropped**, and what got **corroborated**. Pure arithmetic over the log:
+no model runs, so it is instant and offline, and because it matches on the log's
+text snapshots it still surfaces facts that were superseded or forgotten inside the
+window. Comparing two arbitrary spans — *January vs July* — is the same machinery
+pointed at two windows.
+
+### Memory Replay — since you've been away
+
+`brain replay [--peek]`. Open brain after a gap and it leads with a briefing, not a
+blank prompt: what the memory learned and dropped, which projects moved, which
+loops you closed and how many still hang, and any connections the nightly dream
+left for review — all measured from the last time you caught up. It advances that
+last-seen marker as you read, so each replay covers only what's new; `--peek` looks
+without resetting the clock. Pure aggregation over the diff, the projects, the
+loops, and the dream queue: instant and offline. Opening brain after two weeks
+should feel like a briefing, not a search.
+
+### Reflection — descriptive statistics
+
+`brain reflect`. The plain, numeric floor beneath the interpretive mirror: how much
+the assistant knows and of what kind, how sure it is (things it's certain of versus
+hunches still to corroborate), how the store has grown week over week, which
+memories recall leans on most, and which commitments have lingered longest. Every
+figure traces to a row and no model runs, so it is instant and never editorialises —
+the counting the mirror's interpretation will stand on.
+
 ### The memory relationship graph
 
 `brain memory graph [--similar] [--mermaid] [--json]`. Where the note graph shows
@@ -219,6 +273,70 @@ each becomes a project with an assembled dossier:
 `brain projects sync` auto-tags each memory that names exactly one project, so
 **project-scoped recall works with zero classification** — an assistant helping
 with one project recalls that project's context, not your whole life.
+
+---
+
+## Dreaming — the nightly consolidation pass *(planned)*
+
+Every night, while you're away, brain sleeps on the day. Not a late rollup —
+rollup files what happened; dreaming reorganises what it *means*. Modelled on how
+a brain actually consolidates memory, it runs in two phases, and keeping them
+distinct is the whole point.
+
+Everything below obeys the two rules the rest of the system runs on: **compute,
+then narrate** — what to replay, fade, and connect is decided by arithmetic, and
+the model only phrases it — and **propose, don't assert** — the dream's
+inferences land in your review queue, never in your vault unasked.
+
+### NREM — stabilise
+
+The cheap, deterministic phase. It runs first, every night, and barely touches a
+model.
+
+- **Prioritised replay** — it revisits the day's *salient* moments, not all 50k
+  events, folding near-duplicate memories together and letting a newer fact
+  supersede the one it replaces. What earns its keep stays sharp.
+- **Gist extraction** — the one thing rollup never did: it turns specifics into a
+  *rule*. Twenty evenings of clearing your commitments before Monday become one
+  standing fact — *you clear loops on Sunday nights* — filed as semantic memory,
+  not twenty episodic traces. Patterns backed by hard counts are recorded
+  directly; anything the model had to infer is filed as a hypothesis at low
+  confidence, to be proven or forgotten by whether it recurs.
+- **Homeostatic downscaling** — a gentle nightly renormalisation of the whole
+  memory field, so only what's genuinely reinforced stands tall. This is how the
+  store stays clean by construction instead of by deletion.
+- **Artifact association** — the files, commits, and pages that mattered today get
+  tied to the work they belong to. brain doesn't index your code or try to become
+  a copilot; it just remembers *that this artifact was in play on this project*.
+
+### REM — recombine
+
+The creative phase, run last, over the compressed and cleaned field NREM leaves
+behind. This is the engine behind [the mirror](#the-two-faces-of-the-memory): it
+looks for the non-obvious connection between distant pieces of work, the analogy
+across two projects, the thread worth starting — and hands them to you in the
+morning brief as *"overnight, I noticed…"*.
+
+Recombination is also exactly where a memory system could lie to itself, so it is
+fenced on three sides:
+
+1. **Proposals only.** A dreamed-up connection is a suggestion in your queue,
+   never a silent edit to your memory.
+2. **It must show its work.** Every insight names the two things it connects; one
+   that can't is discarded before you ever see it. No un-grounded leaps.
+3. **It has to earn belief.** An accepted insight enters at low confidence and
+   only firms up if reality keeps agreeing — it never outranks something you told
+   brain directly.
+
+### The command
+
+```text
+brain dream [--date YYYY-MM-DD] [--phase nrem|rem] [--dry-run]
+```
+
+It runs itself at midnight in your timezone, on the day that just ended. Until
+you raise the auto-accept threshold, it reports rather than writes — you can read
+exactly what a night of sleep would change before you let it change anything.
 
 ---
 
@@ -363,9 +481,11 @@ at startup rather than surfacing as a pipeline error later.
 ```text
 brain ask <q> | search <q> | timeline        query what it knows
 brain brief                                   the proactive daily digest
+brain replay [--peek]                          catch up on what changed since last time
+brain reflect                                 descriptive stats over your memory
 brain weekly                                  the Sunday executive review
 brain voice | listen | say <text>             talk to it, hear it back (local STT/TTS)
-brain memory [add|forget|log|history|graph]   persistent memory + timeline + graph
+brain memory [add|forget|log|history|graph|diff]   persistent memory + timeline + graph + diff
 brain projects | project <name>               auto-detected projects and dossiers
 brain loop [add|done|drop]                     open commitments
 brain jot <thought>                            braindump: capture and auto-file
@@ -373,7 +493,8 @@ brain tutor [diagnostic|study|quiz|cards|review|screen]
 brain business [read|analyze|verify|forecast|agent|…]
 brain record [--name X] [--no-video]           record a study session into notes
 brain graph [focus] [--hops N] [--similar]     the note graph around a note
-brain mcp serve                                serve memory to MCP hosts
+brain context <file|project|topic>            assemble a context pack for an AI tool
+brain mcp serve                                serve the memory layer to MCP hosts and your own apps
 brain index [--watch] | rollup | prune         cache sync, note proposals, retention
 brain doctor [--probe] | key | mode            runtimes/tiers, API keys, edition
 ```
@@ -403,16 +524,25 @@ benchmark for chat assistants:
 
 **Shipped:** two-tier memory with hybrid recall; the extract→store→recall loop
 with decay, reinforcement, consolidation and supersession; **confidence ratings**;
-the **memory timeline** (git history for memory); the **memory relationship
+the **memory timeline** (git history for memory); the **memory diff** (what
+changed, instant and offline); the **memory relationship
 graph**; **auto-detected projects** with scoped memory; Secretary / Tutor /
-Business modes; the **weekly executive review**; **on-device voice** (STT + TTS,
+Business modes; the **weekly executive review**; **Memory Replay** (catch up on
+what changed since last time); **reflection** (`brain reflect`, descriptive stats
+over memory); **on-device voice** (STT + TTS,
 bundled); a palette of **themes** (light/dark/paper/digital/blue/red + auto); the
-confirmation-gate trust loop; the benchmark harness; and the **MCP memory
-server** — across all three editions.
+confirmation-gate trust loop; the benchmark harness; **context packs** (`brain
+context`, assembled and served over MCP); and the **MCP memory layer** —
+remember/recall plus what-changed, context packs, and project listing, so other
+apps can build on the memory — across all three editions.
 
 **Next:**
 
-- **The mirror** — memory turned inward for self-understanding.
+- **Dreaming** — the nightly NREM/REM consolidation pass (`brain dream`): prioritised
+  replay, gist extraction (episodic→semantic), homeostatic downscaling, and gated
+  REM recombination that feeds the mirror. Spec in `docs/dream.md`.
+- **The mirror** — memory turned inward for self-understanding, interpreting the
+  numbers `brain reflect` computes.
 - **Persisted conversations** — a first-class chat store, so projects gather real
   conversations (today the "conversations" facet is a proxy) and chats can be
   turned into projects directly.
