@@ -241,6 +241,15 @@ memories recall leans on most, and which commitments have lingered longest. Ever
 figure traces to a row and no model runs, so it is instant and never editorialises —
 the counting the mirror's interpretation will stand on.
 
+### Memory health — git status for the store
+
+`brain memory health`. Cheap, deterministic checks that say where the memory needs
+tending: near-duplicates that slipped past write-time dedup, facts gone stale (old,
+never recalled, faded in salience), hunches confidence never firmed up, and
+memories linked to no note. It reports a single **score** — the share of memories
+carrying no defect — and points duplicates and stale facts at `brain memory
+consolidate`. No model; every figure is a query.
+
 ### The memory relationship graph
 
 `brain memory graph [--similar] [--mermaid] [--json]`. Where the note graph shows
@@ -485,7 +494,7 @@ brain replay [--peek]                          catch up on what changed since la
 brain reflect                                 descriptive stats over your memory
 brain weekly                                  the Sunday executive review
 brain voice | listen | say <text>             talk to it, hear it back (local STT/TTS)
-brain memory [add|forget|log|history|graph|diff]   persistent memory + timeline + graph + diff
+brain memory [add|forget|log|history|graph|diff|health]   persistent memory + timeline + graph + diff + health
 brain projects | project <name>               auto-detected projects and dossiers
 brain loop [add|done|drop]                     open commitments
 brain jot <thought>                            braindump: capture and auto-file
@@ -525,7 +534,8 @@ benchmark for chat assistants:
 **Shipped:** two-tier memory with hybrid recall; the extract→store→recall loop
 with decay, reinforcement, consolidation and supersession; **confidence ratings**;
 the **memory timeline** (git history for memory); the **memory diff** (what
-changed, instant and offline); the **memory relationship
+changed, instant and offline); **memory health** (git status for the store); the
+**memory relationship
 graph**; **auto-detected projects** with scoped memory; Secretary / Tutor /
 Business modes; the **weekly executive review**; **Memory Replay** (catch up on
 what changed since last time); **reflection** (`brain reflect`, descriptive stats
