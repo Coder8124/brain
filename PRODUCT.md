@@ -125,8 +125,10 @@ A personal assistant that anticipates instead of archiving.
   never override*: it proposes and reminds, but never decides, never acts outward
   without the confirmation gate, and never rewrites a conclusion you've reached.
   Restraint is built in: one unprompted nudge at a time, non-urgent ones spaced by a
-  cooldown, and only an imminent meeting may break your focus. Design in
-  `docs/presence.md`.
+  cooldown, and only an imminent meeting may break your focus. It runs three ways
+  off one engine: the `brain presence` voice loop, ambiently inside the capture
+  daemon (speaking up while you work, holding its tongue when you're heads-down in
+  one app), and as a banner atop the panel. Design in `docs/presence.md`.
 - **Brief** (`brain brief`) — the proactive digest the app leads with: upcoming
   meetings, open loops (stalest first), what's gone dormant, what you usually do
   around now, and the standing preferences it keeps in mind. Pure arithmetic over
