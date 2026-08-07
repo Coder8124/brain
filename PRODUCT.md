@@ -117,6 +117,16 @@ between editions is which modes are offered — the entire engine is shared.
 
 A personal assistant that anticipates instead of archiving.
 
+- **Presence** (`brain name <name>` · `brain presence`) — the Secretary as an
+  ambient, named voice. It opens with your brief, answers from your memory, and
+  speaks up about an imminent meeting, a loop you've let slip, or a connection it
+  dreamt up overnight. You give it a name; that name is how you address it and, with
+  a wake-word model, the word that wakes it. It is bound by one law — *augment,
+  never override*: it proposes and reminds, but never decides, never acts outward
+  without the confirmation gate, and never rewrites a conclusion you've reached.
+  Restraint is built in: one unprompted nudge at a time, non-urgent ones spaced by a
+  cooldown, and only an imminent meeting may break your focus. Design in
+  `docs/presence.md`.
 - **Brief** (`brain brief`) — the proactive digest the app leads with: upcoming
   meetings, open loops (stalest first), what's gone dormant, what you usually do
   around now, and the standing preferences it keeps in mind. Pure arithmetic over
@@ -494,6 +504,7 @@ brain replay [--peek]                          catch up on what changed since la
 brain reflect                                 descriptive stats over your memory
 brain weekly                                  the Sunday executive review
 brain voice | listen | say <text>             talk to it, hear it back (local STT/TTS)
+brain name [<name>] | presence [--wake]        the ambient, named secretary (voice)
 brain memory [add|forget|log|history|graph|diff|health]   persistent memory + timeline + graph + diff + health
 brain projects | project <name>               auto-detected projects and dossiers
 brain loop [add|done|drop]                     open commitments
@@ -537,8 +548,9 @@ the **memory timeline** (git history for memory); the **memory diff** (what
 changed, instant and offline); **memory health** (git status for the store); the
 **memory relationship
 graph**; **auto-detected projects** with scoped memory; Secretary / Tutor /
-Business modes; the **weekly executive review**; **Memory Replay** (catch up on
-what changed since last time); **reflection** (`brain reflect`, descriptive stats
+Business modes; the **weekly executive review**; the **presence** (the ambient,
+named secretary — voice greeting, grounded answers, restrained interjections);
+**Memory Replay** (catch up on what changed since last time); **reflection** (`brain reflect`, descriptive stats
 over memory); **on-device voice** (STT + TTS,
 bundled); a palette of **themes** (light/dark/paper/digital/blue/red + auto); the
 confirmation-gate trust loop; the benchmark harness; **context packs** (`brain
