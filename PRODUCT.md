@@ -16,7 +16,7 @@ your machine, nothing uploaded unless you say so.
 1. [Who it's for](#who-its-for)
 2. [What makes it different](#what-makes-it-different)
 3. [The two faces of the memory](#the-two-faces-of-the-memory)
-4. [The three modes](#the-three-modes)
+4. [The assistant](#the-assistant)
 5. [The memory system](#the-memory-system)
 6. [Dreaming — the nightly consolidation pass](#dreaming--the-nightly-consolidation-pass)
 7. [The secretary's weekly review](#the-secretarys-weekly-review)
@@ -24,23 +24,16 @@ your machine, nothing uploaded unless you say so.
 9. [Architecture](#architecture)
 10. [Model tiers](#model-tiers)
 11. [The command surface](#the-command-surface)
-12. [Editions](#editions)
-13. [Benchmarks](#benchmarks)
-14. [Status & roadmap](#status--roadmap)
+12. [Benchmarks](#benchmarks)
+13. [Status & roadmap](#status--roadmap)
 
 ---
 
 ## Who it's for
 
-- **The self-manager** who wants a secretary that actually *knows* them — their
+- **The self-manager** who wants an assistant that actually *knows* them — their
   preferences, their people, their standing priorities — instead of an archive
   they have to interrogate.
-- **The student** who wants study material turned into understanding: notes,
-  smart questions, diagnostics, and spaced review, generated from their own
-  vault.
-- **The operator** who needs a business analyst that reads the spreadsheet,
-  checks the math, and tells them the trend — without the numbers leaving the
-  building.
 - **Anyone using Claude, Cursor, or other AI tools** who wants one private memory
   those tools can share, instead of re-explaining themselves in every app.
 
@@ -98,81 +91,47 @@ memory can offer. Design in progress.
 
 ---
 
-## The three modes
+## The assistant
 
-Memory is the platform; the modes are **applications on top of it**. Capture, the
-two-tier memory, hybrid recall, dreaming, the graph, and the trust loop are the
-operating system — Secretary, Tutor, Business (and the inward Mirror) are apps that
-read the one shared memory and add domain surfaces on top. No app keeps its own
-private notion of you: it may hold domain data (Tutor's flashcards, Business's
-spreadsheets), but every fact it learns about *you* flows back to the single
-memory. That rule is what keeps the core thin and the product focused — a
-capability belongs in the platform if it makes memory better, and in an app if
-it's domain-specific.
+Memory is the product. The assistant is the surface you reach it through — one
+assistant, not a set of personas.
 
-The app ships in editions that bundle different modes. The **only** difference
-between editions is which modes are offered — the entire engine is shared.
+It used to be three: Secretary, Tutor, and Business, each with its own panel and
+its own domain data, sharing one engine. That was three products wearing a
+trench coat, and every hour spent on a vertical was an hour not spent on the
+memory. They are gone. What survives is the part that was never persona-specific
+— talking to your memory and having it synthesize an answer.
 
-### Secretary
-
-A personal assistant that anticipates instead of archiving.
-
-- **Presence** (`brain name <name>` · `brain presence`) — the Secretary as an
+- **Conversation** — grounded in three things at once: retrieval over the vault,
+  the persistent memory of what it knows about *you*, and the live brief of
+  what's on your plate. That combination is the difference between an assistant
+  and a search box.
+- **Presence** (`brain name <name>` · `brain presence`) — the assistant as an
   ambient, named voice. It opens with your brief, answers from your memory, and
   speaks up about an imminent meeting, a loop you've let slip, or a connection it
-  dreamt up overnight. You give it a name; that name is how you address it and, with
-  a wake-word model, the word that wakes it. It is bound by one law — *augment,
-  never override*: it proposes and reminds, but never decides, never acts outward
-  without the confirmation gate, and never rewrites a conclusion you've reached.
-  Restraint is built in: one unprompted nudge at a time, non-urgent ones spaced by a
-  cooldown, and only an imminent meeting may break your focus. It runs three ways
-  off one engine: the `brain presence` voice loop, ambiently inside the capture
-  daemon (speaking up while you work, holding its tongue when you're heads-down in
-  one app), and as a banner atop the panel. Design in `docs/presence.md`.
+  dreamt up overnight. You give it a name; that name is how you address it. It is
+  bound by one law — *augment, never override*: it proposes and reminds, but never
+  decides and never rewrites a conclusion you've reached. Restraint is built in:
+  one unprompted nudge at a time, non-urgent ones spaced by a cooldown, and only
+  an imminent meeting may break your focus. It runs two ways off one engine: the
+  `brain presence` voice loop, and ambiently inside the capture daemon (speaking
+  up while you work, holding its tongue when you're heads-down in one app).
+  Design in `docs/presence.md`.
 - **Brief** (`brain brief`) — the proactive digest the app leads with: upcoming
   meetings, open loops (stalest first), what's gone dormant, what you usually do
   around now, and the standing preferences it keeps in mind. Pure arithmetic over
   captured data — no model runs, so it's instant and offline.
 - **Open loops** (`brain loop`) — commitments extracted from your notes and chats
   ("email Sarah the deck"), tracked until you close them. An archive doesn't care
-  what you promised; a secretary tracks exactly that.
-- **Weekly Review** (`brain weekly`) — the Sunday executive briefing (see below).
-- **Emotional & context intelligence** — the persistent memory of preferences and
-  people is what lets it draft in the right tone and stop asking what it already
-  knows.
-- **Confirmation gate** — every outbound action is previewed and requires approval
-  before it runs.
+  what you promised; this tracks exactly that.
+- **Weekly review** (`brain weekly`) — the Sunday executive briefing (see below).
+- **Braindump** (`brain jot <thought>`) — the shortest path from a thought to the
+  vault: captured, classified, and filed as a note proposal or an open loop.
 
-### Tutor
+Anything that would act on the outside world on your behalf is deliberately not
+here. The assistant reads your memory and tells you things; it does not go and do
+things. That boundary is the product.
 
-Turns your vault into learning.
-
-- **Diagnostics** (`brain tutor diagnostic <subject>`) — Khan-style placement
-  quizzes with hand-verified question banks for AP Chemistry, AP Physics C, and
-  AP Calculus BC.
-- **Study material** (`brain tutor study|quiz <topic>`) — summaries and smart
-  questions generated from what's in your vault.
-- **Spaced repetition** (`brain tutor cards|review`) — an SRS flashcard system.
-- **Screen-aware note-taking** (`brain tutor screen on`) — when it detects
-  studious activity on screen it takes notes automatically.
-- **Session recording** (`brain record`) — a hotkey records a study session,
-  transcribes the screen to text, and files it as supporting material.
-
-### Business
-
-The analyst that replaces routine secretarial finance work.
-
-- **Spreadsheets** — reads Excel and CSV into a common table (`internal/sheet`)
-  with deterministic stats.
-- **Verify, forecast, report** — verifies finances, builds expense reports and
-  competitor analyses, produces revenue/profit/margin forecasts and presentation
-  prep. All computation is deterministic Go; the model only narrates.
-- **MCP client** — pulls live data from external MCP servers (dashboards,
-  databases) and summarizes the trends.
-- **Agent harness** (`internal/bizagent`) — runs multi-step business tasks behind
-  the same confirmation gate.
-
----
 
 ## The memory system
 
@@ -457,13 +416,8 @@ disposable.
 | `provider` | one client for every local model runtime (Ollama/LM Studio/Jan/Msty) |
 | `agent` | the conversational assistant (streams, injects memory + vault grounding) |
 | `secretary` | initiative — the brief, open loops, the weekly review |
-| `action` | the confirmation gate for anything the assistant would do outward |
-| `flavor` | the personality/edition the assistant wears |
-| `tutor` | turns the vault into study material (diagnostics, SRS, screen notes) |
-| `business` | reaches outward via MCP to summarize external data |
-| `sheet` | reads spreadsheets (xlsx, csv) into a common table |
-| `bizagent` | the business agent harness |
-| `record` | captures a study session and turns it into notes |
+| `routine` | mines recurring patterns out of the timeline |
+| `flavor` | the assistant's name, your name, and how forward it is |
 | `voice` | on-device speech-to-text (whisper.cpp) and text-to-speech (Piper) |
 | `mcpserver` | exposes brain's persistent memory as an MCP server |
 
@@ -506,30 +460,17 @@ brain replay [--peek]                          catch up on what changed since la
 brain reflect                                 descriptive stats over your memory
 brain weekly                                  the Sunday executive review
 brain voice | listen | say <text>             talk to it, hear it back (local STT/TTS)
-brain name [<name>] | presence [--wake]        the ambient, named secretary (voice)
+brain name [<name>] | presence                 the ambient, named assistant (voice)
 brain memory [add|forget|log|history|graph|diff|health]   persistent memory + timeline + graph + diff + health
 brain projects | project <name>               auto-detected projects and dossiers
 brain loop [add|done|drop]                     open commitments
 brain jot <thought>                            braindump: capture and auto-file
-brain tutor [diagnostic|study|quiz|cards|review|screen]
-brain business [read|analyze|verify|forecast|agent|…]
-brain record [--name X] [--no-video]           record a study session into notes
 brain graph [focus] [--hops N] [--similar]     the note graph around a note
 brain context <file|project|topic>            assemble a context pack for an AI tool
 brain mcp serve                                serve the memory layer to MCP hosts and your own apps
 brain index [--watch] | rollup | prune         cache sync, note proposals, retention
-brain doctor [--probe] | key | mode            runtimes/tiers, API keys, edition
+brain doctor [--probe] | key                   runtimes/tiers, API keys
 ```
-
-## Editions
-
-The **only** file that differs between editions is `internal/flavor/edition.go`.
-
-| Edition | Modes |
-|---|---|
-| **full** (`main`) | Secretary · Tutor · Business |
-| **student** | Tutor |
-| **business-secretary** | Secretary · Business |
 
 ## Benchmarks
 
@@ -549,16 +490,16 @@ with decay, reinforcement, consolidation and supersession; **confidence ratings*
 the **memory timeline** (git history for memory); the **memory diff** (what
 changed, instant and offline); **memory health** (git status for the store); the
 **memory relationship
-graph**; **auto-detected projects** with scoped memory; Secretary / Tutor /
-Business modes; the **weekly executive review**; the **presence** (the ambient,
-named secretary — voice greeting, grounded answers, restrained interjections);
+graph**; **auto-detected projects** with scoped memory; the **weekly executive
+review**; the **presence** (the ambient, named assistant — voice greeting,
+grounded answers, restrained interjections);
 **Memory Replay** (catch up on what changed since last time); **reflection** (`brain reflect`, descriptive stats
 over memory); **on-device voice** (STT + TTS,
 bundled); a palette of **themes** (light/dark/paper/digital/blue/red + auto); the
-confirmation-gate trust loop; the benchmark harness; **context packs** (`brain
-context`, assembled and served over MCP); and the **MCP memory layer** —
+the propose-then-accept trust loop; the benchmark harness; **context packs**
+(`brain context`, assembled and served over MCP); and the **MCP memory layer** —
 remember/recall plus what-changed, context packs, and project listing, so other
-apps can build on the memory — across all three editions.
+apps can build on the memory.
 
 **Next:**
 
