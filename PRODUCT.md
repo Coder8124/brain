@@ -76,12 +76,29 @@ own product *on top of* one private memory that follows you across every tool an
 session. The same store the brain app reads is the one an external agent reads and
 writes — tell one tool something, and the others know it. Nothing is uploaded.
 
-Seven tools, enough to use brain as a memory backend: write (`remember`), read
+Eleven tools in two families.
+
+**Memory** — what do you know about X: write (`remember`, which returns a receipt
+saying whether it created a fact or corroborated one it already had), read
 (`recall`, `list_memories`), revise (`forget`), ask what changed (`memory_diff`),
-pull a ready-made **context pack** for a file or project (`context_pack`), and
-enumerate detected projects (`list_projects`). It speaks newline-delimited
-JSON-RPC 2.0 over stdio; tool failures come back as `isError` results (not
-protocol errors) so the host's model can react.
+enumerate detected projects (`list_projects`).
+
+**Continuity** — where were we. `context(task, project, budget)` assembles
+everything bearing on a task: the last checkpoint, the project dossier, the
+actual prose of the relevant notes, notes reached one hop through your own
+links, memories with their provenance, and open commitments — spent against a
+token ceiling and cited by source. `note_progress` records a line of work as it
+happens. `checkpoint` commits where you stopped to a markdown note in the vault,
+including the field that matters most: what was already tried and didn't work.
+`handoff` does the same and names who takes over. `resume` gives that to whoever
+arrives next.
+
+That last group is the thesis made mechanical. An agent works, checkpoints, and
+shuts down; a different agent — a different *product* — calls `resume` and
+continues. The AI is replaceable. The context isn't.
+
+It speaks newline-delimited JSON-RPC 2.0 over stdio; tool failures come back as
+`isError` results (not protocol errors) so the host's model can react.
 
 ### 2. Memory turned inward — the mirror *(planned)*
 
@@ -406,7 +423,7 @@ disposable.
 | `event` | the episodic record shared by capture and its sources |
 | `capture` | episodic tier — sampling, coalescing, storage, privacy, retention |
 | `index` | the rebuildable cache: notes, edges, embeddings, FTS |
-| `vault` | reads notes from the Obsidian vault |
+| `vault` | reads notes from the Obsidian vault, and is the one door that writes to it |
 | `rollup` | turns episodic events into proposed vault notes (and `jot` braindumps) |
 | `routine` | finds recurring structure (habits, anomalies) in the episodic tier |
 | `memory` | persistent memory — store, recall, dedup, consolidate, confidence, timeline, graph |
@@ -419,7 +436,9 @@ disposable.
 | `routine` | mines recurring patterns out of the timeline |
 | `flavor` | the assistant's name, your name, and how forward it is |
 | `voice` | on-device speech-to-text (whisper.cpp) and text-to-speech (Piper) |
-| `mcpserver` | exposes brain's persistent memory as an MCP server |
+| `session` | working notes and checkpoints — what an agent was doing, and where it stopped |
+| `contextpack` | assembles and budgets everything bearing on a task, from every store |
+| `mcpserver` | serves memory and continuity to MCP hosts; an adapter, not where logic lives |
 
 **Trust loop:** every inference is a **proposal** with cited evidence; nothing
 touches the vault or the outside world until accepted. The `action` package is
@@ -466,7 +485,11 @@ brain projects | project <name>               auto-detected projects and dossier
 brain loop [add|done|drop]                     open commitments
 brain jot <thought>                            braindump: capture and auto-file
 brain graph [focus] [--hops N] [--similar]     the note graph around a note
-brain context <file|project|topic>            assemble a context pack for an AI tool
+brain context <task> [--project p] [--budget n] everything bearing on a task, budgeted
+brain note <project> <what you did>            record progress as you work
+brain checkpoint <project> [--handoff who]     commit where you stopped, into the vault
+brain resume <project>                         pick up where the last agent left off
+brain sessions <project>                       the checkpoint log for a project
 brain mcp serve                                serve the memory layer to MCP hosts and your own apps
 brain index [--watch] | rollup | prune         cache sync, note proposals, retention
 brain doctor [--probe] | key                   runtimes/tiers, API keys
@@ -496,10 +519,12 @@ grounded answers, restrained interjections);
 **Memory Replay** (catch up on what changed since last time); **reflection** (`brain reflect`, descriptive stats
 over memory); **on-device voice** (STT + TTS,
 bundled); a palette of **themes** (light/dark/paper/digital/blue/red + auto); the
-the propose-then-accept trust loop; the benchmark harness; **context packs**
-(`brain context`, assembled and served over MCP); and the **MCP memory layer** —
-remember/recall plus what-changed, context packs, and project listing, so other
-apps can build on the memory.
+the propose-then-accept trust loop; the benchmark harness; **budgeted context**
+(`brain context` — vault prose, graph-reached notes, open loops and provenance,
+spent against a token ceiling); **session continuity** (`note` / `checkpoint` /
+`resume` / `handoff` — working notes in the cache, checkpoints as markdown in the
+vault, so one agent can hand a project to a different agent); and the **MCP
+layer** serving all of it, so other apps can build on the memory.
 
 **Next:**
 
