@@ -54,7 +54,9 @@ another vault with search bolted on:
    you can read, edit, grep, and take elsewhere. If this project dies, you keep a
    vault.
 2. **The database is a cache.** `.brain/index.db` holds embeddings and indexes.
-   Delete it, reindex, get identical state. It is never authoritative.
+   Delete it, reindex, get identical state. It is never authoritative — and that
+   includes what it remembers about you, which lives in `memories/<kind>.md` and
+   is rebuilt from there.
 3. **Local by default.** Nothing leaves the machine unless you name a cloud model
    and confirm the redaction preview. BYOK, paid, or fully local models —
    optimized for Ollama, LM Studio, Jan, and Msty.
