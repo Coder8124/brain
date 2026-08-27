@@ -87,7 +87,7 @@ own product *on top of* one private memory that follows you across every tool an
 session. The same store the brain app reads is the one an external agent reads and
 writes — tell one tool something, and the others know it. Nothing is uploaded.
 
-Eleven tools in two families.
+Twelve tools in two families.
 
 **Memory** — what do you know about X: write (`remember`, which returns a receipt
 saying whether it created a fact or corroborated one it already had), read
