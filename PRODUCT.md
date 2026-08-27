@@ -1,13 +1,24 @@
 # brain — the memory you own
 
-A local-first second brain and AI copilot. It watches your day, distills it into
-an Obsidian vault you fully own, remembers what matters about you across every
-conversation, and lends that memory to the AI tools you already use — all on
-your machine, nothing uploaded unless you say so.
+A local-first memory and continuity layer for AI agents. It watches your day,
+distils it into an Obsidian vault you fully own, remembers what matters about
+you across every conversation, and hands that context to whichever AI you are
+using — all on your machine, nothing uploaded unless you say so.
 
-> **Thesis: memory is the product.** Chat assistants forget you the moment a
-> session ends. brain is the persistent, private memory that doesn't — the one
-> thing you carry between tools, models, and years.
+> **Thesis: memory is the product, and continuity is the proof.** Chat
+> assistants forget you the moment a session ends. brain doesn't — and the test
+> of that is not whether it can find an old note, it is whether an agent that
+> has never seen your project can pick up where a different one stopped.
+
+Two things follow from taking that seriously, and both are why this is not
+another vault with search bolted on:
+
+- **What failed is worth more than what succeeded.** Anyone can restate a goal.
+  The expensive knowledge is the three approaches already ruled out, and it is
+  exactly what dies when a session ends.
+- **Memory has to know what it does not know.** Retrieval always returns its
+  nearest neighbour; a memory layer that cannot say "nothing recorded" will
+  eventually invent an answer and cite itself.
 
 ---
 
